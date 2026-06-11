@@ -1,0 +1,19 @@
+# Ambientes virtuais
+venv/
+venv_python39_backup/
+venv_python313_backup/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
+
+# Claude Code
+.claude/
+
+# Streamlit secrets (se existir)
+.streamlit/secrets.toml

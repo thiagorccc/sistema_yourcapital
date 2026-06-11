@@ -1,0 +1,23 @@
+[theme]
+base = "light"
+primaryColor = "#00283C" # Primary brand color (deep teal)
+backgroundColor = "#FFFFFF" # Main background (clean white)
+secondaryBackgroundColor = "#E6E4E1" # Sidebar / cards background (light neutral gray)
+textColor = "#1C1C1C" # Main text (strong contrast)
+font = "sans serif"
+
+# Optional accent (used in charts/buttons manually)
+# Suggested palette reference:
+# Dark: #00283C
+# Mid:  #28505A
+# Gold accent: #C8A046
+
+
+
+
+
+#primaryColor = "#004466"              # Azul profundo (barras, botões)
+#backgroundColor = "#FAFAFA"           # Fundo geral do app
+#secondaryBackgroundColor = "#E6F0F3"  # Fundo da sidebar
+#textColor = "#1C1C1C"                 # Cor do texto padrão
+#font = "sans serif"                   # Fonte padrão Streamlit
