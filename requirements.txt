@@ -6,7 +6,7 @@ plotly
 yfinance
 pillow
 git+https://github.com/robertmartin8/PyPortfolioOpt.git
-empyrical
+empyrical-reloaded
 scipy
 python-dateutil
 ta
