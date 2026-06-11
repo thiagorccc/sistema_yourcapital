@@ -5,6 +5,8 @@ numpy
 plotly
 yfinance
 pillow
+python-pptx
+kaleido
 git+https://github.com/robertmartin8/PyPortfolioOpt.git
 empyrical-reloaded
 scipy
