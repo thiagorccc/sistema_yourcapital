@@ -255,14 +255,25 @@ def _render_constraints_expander(tickers, key_prefix):
         st.markdown("##### Limites Globais")
         st.caption("Aplicados a todos os ativos sem restrição individual definida abaixo.")
         cg1, cg2 = st.columns(2)
+
+        # Restore number_input values from backup keys (lost when "Voltar" hides widgets)
+        _gmin_key = f"alloc_gmin_{key_prefix}"
+        _gmax_key = f"alloc_gmax_{key_prefix}"
+        if _gmin_key not in st.session_state:
+            st.session_state[_gmin_key] = st.session_state.get(f"{_gmin_key}_bak", 0.0)
+        if _gmax_key not in st.session_state:
+            st.session_state[_gmax_key] = st.session_state.get(f"{_gmax_key}_bak", 100.0)
+
         g_min_pct = cg1.number_input(
             "Mínimo por ativo (%)", min_value=0.0, max_value=50.0, value=0.0, step=0.5,
-            key=f"alloc_gmin_{key_prefix}",
+            key=_gmin_key,
         )
         g_max_pct = cg2.number_input(
             "Máximo por ativo (%)", min_value=1.0, max_value=100.0, value=100.0, step=0.5,
-            key=f"alloc_gmax_{key_prefix}",
+            key=_gmax_key,
         )
+        st.session_state[f"{_gmin_key}_bak"] = g_min_pct
+        st.session_state[f"{_gmax_key}_bak"] = g_max_pct
         g_min, g_max = g_min_pct / 100, g_max_pct / 100
 
         st.markdown("##### Restrições por Ativo")
@@ -274,8 +285,9 @@ def _render_constraints_expander(tickers, key_prefix):
             "Mín (%)": pd.Series(dtype="float"),
             "Máx (%)": pd.Series(dtype="float"),
         })
+        _override_snap = f"alloc_override_snap_{key_prefix}"
         override_df = st.data_editor(
-            empty_override,
+            st.session_state.get(_override_snap, empty_override),
             num_rows="dynamic",
             column_config={
                 "Ativo":   st.column_config.SelectboxColumn("Ativo", options=ticker_opts, required=True),
@@ -285,6 +297,7 @@ def _render_constraints_expander(tickers, key_prefix):
             hide_index=True,
             key=f"alloc_override_{key_prefix}",
         )
+        st.session_state[_override_snap] = override_df.copy()
 
         st.markdown("##### Restrições por Grupo de Ativos")
         st.caption("Limites para o peso total de um conjunto de ativos (ex: máx 60% em renda variável). Use os tickers exatos, separados por vírgula.")
@@ -294,8 +307,9 @@ def _render_constraints_expander(tickers, key_prefix):
             "Mín (%)":                     pd.Series(dtype="float"),
             "Máx (%)":                     pd.Series(dtype="float"),
         })
+        _groups_snap = f"alloc_groups_snap_{key_prefix}"
         group_df = st.data_editor(
-            empty_groups,
+            st.session_state.get(_groups_snap, empty_groups),
             num_rows="dynamic",
             column_config={
                 "Nome do Grupo":             st.column_config.TextColumn("Nome do Grupo"),
@@ -306,6 +320,7 @@ def _render_constraints_expander(tickers, key_prefix):
             hide_index=True,
             key=f"alloc_groups_{key_prefix}",
         )
+        st.session_state[_groups_snap] = group_df.copy()
 
     # Parse per-asset overrides
     for _, row in override_df.dropna(subset=["Ativo"]).iterrows():
@@ -365,6 +380,7 @@ def _portfolio_editor(default_symbols, default_weights, ticker_options, ticker_l
             "Ticker": st.column_config.SelectboxColumn("Ativo", options=ticker_options),
             "Weight": st.column_config.NumberColumn("Peso (%)", min_value=0.0, max_value=100.0, step=0.01, format="%.2f"),
         },
+        hide_index=True,
         key=editor_key,
     )
     st.session_state[snapshot_key] = display.copy()
@@ -1060,7 +1076,7 @@ def _make_allocation_table_fig(weights_atual, weights_sug):
     return fig
 
 
-def _gerar_relatorio_pptx(client_name, series_dict, returns_df, weights_atual, weights_sug, benchmark_label, frontier_fig=None, slide_texts=None):
+def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df, weights_atual, weights_sug, benchmark_label, frontier_fig=None, slide_texts=None):
     from pptx import Presentation
     from pptx.util import Pt
     from pptx.dml.color import RGBColor
@@ -1372,24 +1388,27 @@ def _gerar_relatorio_pptx(client_name, series_dict, returns_df, weights_atual, w
         _GRN = RGBColor(0x05, 0x96, 0x69)
         _RED = RGBColor(0xDC, 0x26, 0x26)
         if weights_sug:
-            alloc_hdrs = ["Ativo", "Atual %", "Sugerido %", "Diferença %"]
+            alloc_hdrs = ["Ativo", "Atual %", "Sugerido %", "Diferença %", "Movimentação (R$)"]
             alloc_rows, alloc_fc = [], []
             for t in _tkrs_a:
                 wa  = weights_atual.get(t, 0)
                 ws  = weights_sug.get(t, 0)
                 dif = ws - wa
+                fin = dif * portfolio_value
                 alloc_rows.append([
                     symbol_info.get(t, t),
                     f"{wa:.2%}", f"{ws:.2%}",
                     f"{dif:+.2%}",
+                    _brl(fin),
                 ])
                 dfc = _GRN if dif > 0.0005 else (_RED if dif < -0.0005 else None)
-                alloc_fc.append([None, None, None, dfc])
-            alloc_cw = [int(content_w * p) for p in [0.40, 0.20, 0.20, 0.20]]
+                ffc = _GRN if fin > 0      else (_RED if fin < 0      else None)
+                alloc_fc.append([None, None, None, dfc, ffc])
+            alloc_cw = [int(content_w * p) for p in [0.30, 0.14, 0.14, 0.15, 0.27]]
             _pptx_table(
                 sl_e, alloc_hdrs, alloc_rows, margin_l, chart_top, content_w,
                 row_h=_sh(0.30), header_h=_sh(0.35),
-                col_aligns=["left", "right", "right", "right"],
+                col_aligns=["left", "right", "right", "right", "right"],
                 col_widths=alloc_cw,
                 cell_font_colors=alloc_fc,
             )
@@ -1427,6 +1446,11 @@ def _render_report_ui(tab_key):
     st.markdown("---")
     with st.expander("Gerar Relatório PPTX", expanded=False):
         r_client = st.text_input("Nome do cliente", key=f"{tab_key}_r_client")
+        r_value  = st.number_input(
+            "Valor total da carteira (R$)",
+            min_value=0.0, value=1_000_000.0, step=10_000.0,
+            key=f"{tab_key}_r_value",
+        )
 
         st.markdown("**Textos por slide** *(opcional — aparecem abaixo de cada gráfico/tabela)*")
 
@@ -1509,6 +1533,7 @@ def _render_report_ui(tab_key):
                 with st.spinner("Gerando relatório PPTX…"):
                     report_bytes = _gerar_relatorio_pptx(
                         r_client.strip(),
+                        r_value,
                         st.session_state[series_key],
                         st.session_state[returns_key],
                         st.session_state.get(wa_key) or {},
