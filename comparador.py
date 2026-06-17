@@ -297,7 +297,7 @@ def _render_constraints_expander(tickers, key_prefix):
             hide_index=True,
             key=f"alloc_override_{key_prefix}",
         )
-        st.session_state[_override_snap] = override_df.copy()
+        st.session_state[_override_snap] = override_df.reset_index(drop=True).copy()
 
         st.markdown("##### Restrições por Grupo de Ativos")
         st.caption("Limites para o peso total de um conjunto de ativos (ex: máx 60% em renda variável). Use os tickers exatos, separados por vírgula.")
@@ -320,7 +320,7 @@ def _render_constraints_expander(tickers, key_prefix):
             hide_index=True,
             key=f"alloc_groups_{key_prefix}",
         )
-        st.session_state[_groups_snap] = group_df.copy()
+        st.session_state[_groups_snap] = group_df.reset_index(drop=True).copy()
 
     # Parse per-asset overrides
     for _, row in override_df.dropna(subset=["Ativo"]).iterrows():
@@ -383,7 +383,7 @@ def _portfolio_editor(default_symbols, default_weights, ticker_options, ticker_l
         hide_index=True,
         key=editor_key,
     )
-    st.session_state[snapshot_key] = display.copy()
+    st.session_state[snapshot_key] = display.reset_index(drop=True).copy()
     portfolio = display.dropna(subset=["Ticker"]).copy()
     portfolio["Ticker"] = portfolio["Ticker"].map(ticker_lookup)
     portfolio["Weight"] = portfolio["Weight"] / 100
