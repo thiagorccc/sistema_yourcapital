@@ -645,6 +645,36 @@ symbol_br_indices = {
     "IDKA PRE": "IDKA PRÉ 5A (Prefixado 5 anos)",
     "IHFA":     "IHFA (Hedge Funds)",
     "IFIX":     "IFIX (Fundos Imobiliários)",
+
+    # Demais índices ANBIMA (histórico via Anbima/ + atualizar_indices_anbima.py)
+    "IDA-DI":            "IDA-DI (Debêntures DI)",
+    "IDA-GERAL":         "IDA-GERAL (Debêntures Geral)",
+    "IDA-IPCA INFRA":    "IDA-IPCA Infraestrutura",
+    "IDA-IPCA EX-INFRA": "IDA-IPCA ex-Infraestrutura",
+    "IDA-LIQ DI":        "IDA-LIQ DI (Debêntures líquidas DI)",
+    "IDA-LIQ GERAL":     "IDA-LIQ Geral (Debêntures líquidas)",
+    "IDA-LIQ IPCA":      "IDA-LIQ IPCA (Debêntures líquidas IPCA+)",
+    "IDA-LIQ IPCA INFRA": "IDA-LIQ IPCA Infraestrutura",
+    "IDKA PRE 3M":       "IDKA PRÉ 3M (Prefixado 3 meses)",
+    "IDKA PRE 1A":       "IDKA PRÉ 1A (Prefixado 1 ano)",
+    "IDKA PRE 2A":       "IDKA PRÉ 2A (Prefixado 2 anos)",
+    "IDKA PRE 3A":       "IDKA PRÉ 3A (Prefixado 3 anos)",
+    "IDKA IPCA 2A":      "IDKA IPCA 2A (Indexado IPCA 2 anos)",
+    "IDKA IPCA 3A":      "IDKA IPCA 3A (Indexado IPCA 3 anos)",
+    "IDKA IPCA 5A":      "IDKA IPCA 5A (Indexado IPCA 5 anos)",
+    "IDKA IPCA 10A":     "IDKA IPCA 10A (Indexado IPCA 10 anos)",
+    "IDKA IPCA 15A":     "IDKA IPCA 15A (Indexado IPCA 15 anos)",
+    "IDKA IPCA 20A":     "IDKA IPCA 20A (Indexado IPCA 20 anos)",
+    "IDKA IPCA 30A":     "IDKA IPCA 30A (Indexado IPCA 30 anos)",
+    "IMA-B 5 P2":        "IMA-B 5 P2",
+    "IMA-GERAL":         "IMA-GERAL (Renda Fixa Total)",
+    "IMA-GERAL EX-C":    "IMA-GERAL ex-C (exclui NTN-C)",
+    "IMA-S":             "IMA-S (LFT/Selic)",
+    "IRF-M":             "IRF-M (Prefixado Total)",
+    "IRF-M 1":           "IRF-M 1 (Prefixado até 1 ano)",
+    "IRF-M 1+":          "IRF-M 1+ (Prefixado acima de 1 ano)",
+    "IRF-M P2":          "IRF-M P2",
+    "IRF-M P3":          "IRF-M P3",
 }
 
 benchmarks = {
@@ -831,6 +861,35 @@ def _load_all_br_indices():
         ("IDA-IPCA", "IDA-IPCA.xlsx"),
         ("IDKA PRE", "IDKA 5A.xlsx"),
         ("IHFA",     "IHFA.xlsx"),
+
+        ("IDA-DI",             "IDA-DI.xlsx"),
+        ("IDA-GERAL",          "IDA-Geral.xlsx"),
+        ("IDA-IPCA INFRA",     "IDA-IPCA Infraestrutura.xlsx"),
+        ("IDA-IPCA EX-INFRA",  "IDA-IPCA ex-Infraestrutura.xlsx"),
+        ("IDA-LIQ DI",         "IDA-LIQ DI.xlsx"),
+        ("IDA-LIQ GERAL",      "IDA-LIQ Geral.xlsx"),
+        ("IDA-LIQ IPCA",       "IDA-LIQ IPCA.xlsx"),
+        ("IDA-LIQ IPCA INFRA", "IDA-LIQ IPCA Infraestrutura.xlsx"),
+        ("IDKA PRE 3M",        "IDKA 3M.xlsx"),
+        ("IDKA PRE 1A",        "IDKA 1A.xlsx"),
+        ("IDKA PRE 2A",        "IDKA 2A.xlsx"),
+        ("IDKA PRE 3A",        "IDKA 3A.xlsx"),
+        ("IDKA IPCA 2A",       "IDKA IPCA 2A.xlsx"),
+        ("IDKA IPCA 3A",       "IDKA IPCA 3A.xlsx"),
+        ("IDKA IPCA 5A",       "IDKA IPCA 5A.xlsx"),
+        ("IDKA IPCA 10A",      "IDKA IPCA 10A.xlsx"),
+        ("IDKA IPCA 15A",      "IDKA IPCA 15A.xlsx"),
+        ("IDKA IPCA 20A",      "IDKA IPCA 20A.xlsx"),
+        ("IDKA IPCA 30A",      "IDKA IPCA 30A.xlsx"),
+        ("IMA-B 5 P2",         "IMA-B 5 P2.xlsx"),
+        ("IMA-GERAL",          "IMA-Geral.xlsx"),
+        ("IMA-GERAL EX-C",     "IMA-Geral ex-C.xlsx"),
+        ("IMA-S",              "IMA-S.xlsx"),
+        ("IRF-M",              "IRF-M.xlsx"),
+        ("IRF-M 1",            "IRF-M 1.xlsx"),
+        ("IRF-M 1+",           "IRF-M 1+.xlsx"),
+        ("IRF-M P2",           "IRF-M P2.xlsx"),
+        ("IRF-M P3",           "IRF-M P3.xlsx"),
     ]:
         try:
             series[col] = _anbima_excel(fname)
@@ -854,7 +913,7 @@ def _load_all_br_indices():
 def load_br_indices(start=None, end=None):
     """
     Retorna DataFrame de retornos diários dos índices BR proprietários/BCB.
-    Colunas disponíveis: CDI, IMA-B, IMA-B 5, IMA-B 5+, IDA-IPCA, IDKA PRE, IHFA, IFIX.
+    Colunas disponíveis: ver chaves de `symbol_br_indices`.
     Carrega o histórico completo uma vez e filtra por data nas chamadas seguintes.
     """
     global _br_full_df

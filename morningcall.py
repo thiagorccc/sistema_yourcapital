@@ -12,38 +12,122 @@ import tempfile
 
 
 # Configurações visuais do PowerPoint
-FONTE_TITULO = "Futura"
-FONTE_CORPO = "Futura"
+FONTE_TITULO = "Raleway"
+FONTE_CORPO = "Raleway"
 COR_TITULO = RGBColor(0, 40, 60)
 COR_CORPO = RGBColor(40, 80, 90)
-TAMANHO_TITULO = Pt(22)
-TAMANHO_CORPO = Pt(11)
 
+# Valores de referência calibrados para A4 vertical (8.264 x 11.694 in). O
+# template Morningcall.pptx pode vir em outro tamanho de slide (ex.: o layout
+# ampliado usado no analise.pptx) — por isso todos escalam proporcionalmente
+# ao tamanho real do template via _aplicar_escala_pagina(), chamada uma vez
+# ao carregar a Presentation. Sem essa chamada, os valores abaixo são usados
+# como estão (equivalente a um slide A4).
+_REF_LARGURA = Inches(8.264)
+_REF_ALTURA = Inches(11.694)
 
-# O template Morningcall.pptx está em formato A4 vertical:
-# largura aproximada = 8.26 in; altura aproximada = 11.69 in.
-MARGEM_X = Inches(0.83)
-TOPO_CONTEUDO = Inches(0.90)
-LARGURA_CONTEUDO = Inches(6.60)
-ALTURA_TITULO = Inches(0.40)
-ESPACO_TITULO_CORPO = Inches(0.10)
-ESPACO_ENTRE_PARAGRAFOS = Inches(0.14)
-ESPACO_ENTRE_SECOES = Inches(0.32)
-RODAPE_LIMITE = Inches(10.55)
+_REF_TAMANHO_TITULO = 22
+_REF_TAMANHO_CORPO = 11
+_REF_ESPACAMENTO_LINHA_CORPO = 17
+_REF_ESPACO_APOS_PARAGRAFO = 12
+_REF_TAMANHO_LOGO_FALLBACK = 10
 
-ALTURA_LINHA_CORPO = Inches(0.225)
+_REF_MARGEM_X = Inches(0.83)
+_REF_TOPO_CONTEUDO = Inches(0.90)
+_REF_LARGURA_CONTEUDO = Inches(6.60)
+_REF_ALTURA_TITULO = Inches(0.40)
+_REF_ESPACO_TITULO_CORPO = Inches(0.10)
+_REF_ESPACO_ENTRE_PARAGRAFOS = Inches(0.14)
+_REF_ESPACO_ENTRE_SECOES = Inches(0.32)
+_REF_RODAPE_LIMITE = Inches(10.55)
+
+_REF_ALTURA_LINHA_CORPO = Inches(0.225)
+_REF_ALTURA_MINIMA_CORPO = Inches(0.2)
+
+_REF_LOGO_MAX_W = Inches(0.55)
+_REF_LOGO_MAX_H = Inches(0.55)
+_REF_LOGO_MARGEM_DIREITA = Inches(0.80)
+_REF_LOGO_Y = Inches(10.55)
+
+_REF_ALTURA_MAX_GRAFICO = Inches(9.0)
+_REF_ESPACO_TEXTO_GRAFICO = Inches(0.25)
+_REF_ESPACO_APOS_GRAFICO = Inches(0.35)
+
 CARACTERES_POR_LINHA = 88
 LINHAS_EXTRAS_POR_PARAGRAFO = 0.75
 
-LOGO_RODAPE = "favicon.png"
-LOGO_MAX_W = Inches(0.55)
-LOGO_MAX_H = Inches(0.55)
-LOGO_MARGEM_DIREITA = Inches(0.80)
-LOGO_Y = Inches(10.55)
+LOGO_RODAPE = "icone_final.png"
 
-ALTURA_MAX_GRAFICO = Inches(9.0)
-ESPACO_TEXTO_GRAFICO = Inches(0.25)
-ESPACO_APOS_GRAFICO = Inches(0.35)
+TAMANHO_TITULO = Pt(_REF_TAMANHO_TITULO)
+TAMANHO_CORPO = Pt(_REF_TAMANHO_CORPO)
+ESPACAMENTO_LINHA_CORPO = Pt(_REF_ESPACAMENTO_LINHA_CORPO)
+ESPACO_APOS_PARAGRAFO = Pt(_REF_ESPACO_APOS_PARAGRAFO)
+TAMANHO_LOGO_FALLBACK = Pt(_REF_TAMANHO_LOGO_FALLBACK)
+
+MARGEM_X = _REF_MARGEM_X
+TOPO_CONTEUDO = _REF_TOPO_CONTEUDO
+LARGURA_CONTEUDO = _REF_LARGURA_CONTEUDO
+ALTURA_TITULO = _REF_ALTURA_TITULO
+ESPACO_TITULO_CORPO = _REF_ESPACO_TITULO_CORPO
+ESPACO_ENTRE_PARAGRAFOS = _REF_ESPACO_ENTRE_PARAGRAFOS
+ESPACO_ENTRE_SECOES = _REF_ESPACO_ENTRE_SECOES
+RODAPE_LIMITE = _REF_RODAPE_LIMITE
+
+ALTURA_LINHA_CORPO = _REF_ALTURA_LINHA_CORPO
+ALTURA_MINIMA_CORPO = _REF_ALTURA_MINIMA_CORPO
+
+LOGO_MAX_W = _REF_LOGO_MAX_W
+LOGO_MAX_H = _REF_LOGO_MAX_H
+LOGO_MARGEM_DIREITA = _REF_LOGO_MARGEM_DIREITA
+LOGO_Y = _REF_LOGO_Y
+
+ALTURA_MAX_GRAFICO = _REF_ALTURA_MAX_GRAFICO
+ESPACO_TEXTO_GRAFICO = _REF_ESPACO_TEXTO_GRAFICO
+ESPACO_APOS_GRAFICO = _REF_ESPACO_APOS_GRAFICO
+
+
+def _aplicar_escala_pagina(prs):
+    """Reescala as constantes de layout para o tamanho real do slide do template.
+
+    Sempre recalcula a partir dos valores _REF_* (referência A4), nunca a
+    partir das constantes públicas já escaladas — assim a função pode ser
+    chamada mais de uma vez (ex.: várias gerações na mesma sessão do
+    Streamlit) sem acumular escala.
+    """
+    global MARGEM_X, TOPO_CONTEUDO, LARGURA_CONTEUDO, ALTURA_TITULO
+    global ESPACO_TITULO_CORPO, ESPACO_ENTRE_PARAGRAFOS, ESPACO_ENTRE_SECOES, RODAPE_LIMITE
+    global ALTURA_LINHA_CORPO, ALTURA_MINIMA_CORPO, LOGO_MAX_W, LOGO_MAX_H, LOGO_MARGEM_DIREITA, LOGO_Y
+    global ALTURA_MAX_GRAFICO, ESPACO_TEXTO_GRAFICO, ESPACO_APOS_GRAFICO
+    global TAMANHO_TITULO, TAMANHO_CORPO, ESPACAMENTO_LINHA_CORPO, ESPACO_APOS_PARAGRAFO
+    global TAMANHO_LOGO_FALLBACK
+
+    escala_w = prs.slide_width / _REF_LARGURA
+    escala_h = prs.slide_height / _REF_ALTURA
+
+    MARGEM_X = int(_REF_MARGEM_X * escala_w)
+    LARGURA_CONTEUDO = int(_REF_LARGURA_CONTEUDO * escala_w)
+    LOGO_MARGEM_DIREITA = int(_REF_LOGO_MARGEM_DIREITA * escala_w)
+    LOGO_MAX_W = int(_REF_LOGO_MAX_W * escala_w)
+
+    TOPO_CONTEUDO = int(_REF_TOPO_CONTEUDO * escala_h)
+    ALTURA_TITULO = int(_REF_ALTURA_TITULO * escala_h)
+    ESPACO_TITULO_CORPO = int(_REF_ESPACO_TITULO_CORPO * escala_h)
+    ESPACO_ENTRE_PARAGRAFOS = int(_REF_ESPACO_ENTRE_PARAGRAFOS * escala_h)
+    ESPACO_ENTRE_SECOES = int(_REF_ESPACO_ENTRE_SECOES * escala_h)
+    RODAPE_LIMITE = int(_REF_RODAPE_LIMITE * escala_h)
+    ALTURA_LINHA_CORPO = int(_REF_ALTURA_LINHA_CORPO * escala_h)
+    ALTURA_MINIMA_CORPO = int(_REF_ALTURA_MINIMA_CORPO * escala_h)
+    LOGO_MAX_H = int(_REF_LOGO_MAX_H * escala_h)
+    LOGO_Y = int(_REF_LOGO_Y * escala_h)
+    ALTURA_MAX_GRAFICO = int(_REF_ALTURA_MAX_GRAFICO * escala_h)
+    ESPACO_TEXTO_GRAFICO = int(_REF_ESPACO_TEXTO_GRAFICO * escala_h)
+    ESPACO_APOS_GRAFICO = int(_REF_ESPACO_APOS_GRAFICO * escala_h)
+
+    TAMANHO_TITULO = Pt(max(6, round(_REF_TAMANHO_TITULO * escala_h)))
+    TAMANHO_CORPO = Pt(max(6, round(_REF_TAMANHO_CORPO * escala_h)))
+    ESPACAMENTO_LINHA_CORPO = Pt(max(6, round(_REF_ESPACAMENTO_LINHA_CORPO * escala_h)))
+    ESPACO_APOS_PARAGRAFO = Pt(max(6, round(_REF_ESPACO_APOS_PARAGRAFO * escala_h)))
+    TAMANHO_LOGO_FALLBACK = Pt(max(6, round(_REF_TAMANHO_LOGO_FALLBACK * escala_h)))
 def carregar_graficos_disponiveis(data_inicio_semana=None, data_fim_semana=None):
     """
     Carrega os gráficos disponíveis a partir do arquivo graficos.py.
@@ -171,7 +255,7 @@ def adicionar_titulo(slide, texto, y):
 
 
 def adicionar_corpo(slide, texto, y, altura):
-    altura = min(altura, max(Inches(0.2), RODAPE_LIMITE - y))
+    altura = min(altura, max(ALTURA_MINIMA_CORPO, RODAPE_LIMITE - y))
     caixa = slide.shapes.add_textbox(MARGEM_X, y, LARGURA_CONTEUDO, altura)
     caixa.name = "Caixa de texto - corpo"
     tf = caixa.text_frame
@@ -192,8 +276,8 @@ def adicionar_corpo(slide, texto, y, altura):
             p = tf.add_paragraph()
 
         p.alignment = PP_ALIGN.JUSTIFY
-        p.line_spacing = Pt(17)
-        p.space_after = Pt(12)
+        p.line_spacing = ESPACAMENTO_LINHA_CORPO
+        p.space_after = ESPACO_APOS_PARAGRAFO
 
         for j, seg in enumerate(re.split(r'\*([^*]+)\*', paragrafo)):
             if not seg:
@@ -216,7 +300,7 @@ def limpar_slide(slide):
 
 
 def adicionar_logo_rodape(slide):
-    """Adiciona a logo da Oikos no canto inferior direito, mantendo a proporção original."""
+    """Adiciona a logo da Your Capital no canto inferior direito, mantendo a proporção original."""
     if os.path.exists(LOGO_RODAPE):
         with Image.open(LOGO_RODAPE) as img:
             largura_px, altura_px = img.size
@@ -242,15 +326,15 @@ def adicionar_logo_rodape(slide):
         )
     else:
         # Fallback: caso o arquivo da logo não esteja na pasta, escreve o nome no rodapé.
-        caixa = slide.shapes.add_textbox(Inches(6.25), Inches(10.70), Inches(1.2), Inches(0.25))
+        caixa = slide.shapes.add_textbox(Inches(5.65), Inches(10.70), Inches(1.8), Inches(0.25))
         tf = caixa.text_frame
         tf.clear()
         p = tf.paragraphs[0]
         p.alignment = PP_ALIGN.RIGHT
         run = p.add_run()
-        run.text = "OIKOS"
+        run.text = "YOUR CAPITAL"
         run.font.name = FONTE_TITULO
-        run.font.size = Pt(10)
+        run.font.size = TAMANHO_LOGO_FALLBACK
         run.font.bold = True
         run.font.color.rgb = COR_TITULO
 
@@ -454,7 +538,7 @@ def adicionar_secao_no_relatorio(prs, slide_atual, titulo, texto, y_atual, grafi
 def show_morningcall():
     import datetime
 
-    _logo = Image.open("Logo Oikos Horizontal Colorido.png")
+    _logo = Image.open("logo_final.png")
     st.image(_logo, use_container_width=False, width=800)
 
     st.title("Gerador de Relatório")
@@ -543,8 +627,9 @@ def show_morningcall():
     if st.button("Gerar PowerPoint"):
         prs = Presentation("Morningcall.pptx")
 
-        # Garante que qualquer slide criado use o mesmo tamanho A4 vertical do template.
-        # O arquivo já vem nesse formato, mas mantemos explícito para evitar distorções.
+        # Reescala margens, fontes e espaçamentos para o tamanho real do slide
+        # do template (pode não ser mais A4 — ver _aplicar_escala_pagina).
+        _aplicar_escala_pagina(prs)
 
         # Estrutura esperada do template:
         # slide 0 = capa

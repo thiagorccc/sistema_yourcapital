@@ -286,16 +286,22 @@ def _render_constraints_expander(tickers, key_prefix):
             "Máx (%)": pd.Series(dtype="float"),
         })
         _override_snap = f"alloc_override_snap_{key_prefix}"
+        _override_key  = f"alloc_override_{key_prefix}"
+        _init_override = (
+            st.session_state[_override_snap]
+            if _override_key not in st.session_state and _override_snap in st.session_state
+            else empty_override
+        )
         override_df = st.data_editor(
-            st.session_state.get(_override_snap, empty_override),
+            _init_override,
             num_rows="dynamic",
             column_config={
                 "Ativo":   st.column_config.SelectboxColumn("Ativo", options=ticker_opts, required=True),
-                "Mín (%)": st.column_config.NumberColumn("Mín (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.1f"),
-                "Máx (%)": st.column_config.NumberColumn("Máx (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.1f"),
+                "Mín (%)": st.column_config.NumberColumn("Mín (%)", min_value=0.0, max_value=100.0, step=0.1, format="%.2f"),
+                "Máx (%)": st.column_config.NumberColumn("Máx (%)", min_value=0.0, max_value=100.0, step=0.1, format="%.2f"),
             },
             hide_index=True,
-            key=f"alloc_override_{key_prefix}",
+            key=_override_key,
         )
         st.session_state[_override_snap] = override_df.reset_index(drop=True).copy()
 
@@ -308,17 +314,23 @@ def _render_constraints_expander(tickers, key_prefix):
             "Máx (%)":                     pd.Series(dtype="float"),
         })
         _groups_snap = f"alloc_groups_snap_{key_prefix}"
+        _groups_key  = f"alloc_groups_{key_prefix}"
+        _init_groups = (
+            st.session_state[_groups_snap]
+            if _groups_key not in st.session_state and _groups_snap in st.session_state
+            else empty_groups
+        )
         group_df = st.data_editor(
-            st.session_state.get(_groups_snap, empty_groups),
+            _init_groups,
             num_rows="dynamic",
             column_config={
                 "Nome do Grupo":             st.column_config.TextColumn("Nome do Grupo"),
                 "Ativos (tickers, vírgula)": st.column_config.TextColumn("Ativos"),
-                "Mín (%)": st.column_config.NumberColumn("Mín (%)", min_value=0.0, max_value=100.0, step=1.0, format="%.0f"),
-                "Máx (%)": st.column_config.NumberColumn("Máx (%)", min_value=0.0, max_value=100.0, step=1.0, format="%.0f"),
+                "Mín (%)": st.column_config.NumberColumn("Mín (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.1f"),
+                "Máx (%)": st.column_config.NumberColumn("Máx (%)", min_value=0.0, max_value=100.0, step=0.5, format="%.1f"),
             },
             hide_index=True,
-            key=f"alloc_groups_{key_prefix}",
+            key=_groups_key,
         )
         st.session_state[_groups_snap] = group_df.reset_index(drop=True).copy()
 
@@ -727,7 +739,7 @@ def _align_series_for_report(series_dict):
 
 
 _REPORT_PALETTE = ["#60A5FA", "#1E3A8A", "#DC2626", "#059669", "#7C3AED", "#0891B2"]
-_OIKOS_NAVY = "#0D2B3E"
+_YC_NAVY = "#001441"
 
 
 def _brl(value, decimals=2):
@@ -744,39 +756,39 @@ def _brl(value, decimals=2):
 _TEXTOS_PADRAO = {
     "fronteira": {
         "Explicação": (
-            "A fronteira eficiente é o conjunto de carteiras que oferecem o máximo retorno esperado "
+            "A *fronteira eficiente* é o conjunto de carteiras que oferecem o máximo retorno esperado "
             "para cada nível de risco aceitável, ou equivalentemente, o mínimo risco para cada nível "
             "de retorno desejado. Construída através da teoria moderna de portfolio (Média-Variância), "
             "ela representa as combinações ótimas de ativos que eliminam o risco não-sistemático através "
-            "da diversificação. Qualquer carteira localizada abaixo da fronteira é considerada ineficiente, "
+            "da diversificação. Qualquer carteira localizada abaixo da fronteira é considerada *ineficiente*, "
             "pois oferece menor retorno para o mesmo risco ou maior risco para o mesmo retorno."
         ),
         "Análise do Gráfico": (
-            "O gráfico evidencia a ineficiência da carteira atual, que se situa abaixo da fronteira "
+            "O gráfico evidencia a *ineficiência da carteira atual*, que se situa abaixo da fronteira "
             "eficiente, oferecendo retorno de {atual_ret} com risco de {atual_risco}. "
             "A análise comparativa apresenta duas alternativas otimizadas: a carteira \"Mesmo Risco\" "
             "mantém o risco em {mesmo_risco_risco} enquanto eleva o retorno para {mesmo_risco_ret}, "
             "e a carteira \"Mesmo Retorno\" oferece o mesmo retorno da atual ({atual_ret}) com risco "
-            "reduzido a {mesmo_ret_risco}. A estratégia recomendada é a implementação da carteira "
-            "\"Mesmo Risco\", que permite capturar {ganho_ret} pontos percentuais adicionais de retorno "
-            "anual mantendo a volatilidade controlada, consolidando uma alocação otimizada e "
+            "reduzido a {mesmo_ret_risco}. *A estratégia recomendada é a implementação da carteira "
+            "\"Mesmo Risco\"*, que permite capturar *{ganho_ret} pontos percentuais adicionais de retorno "
+            "anual* mantendo a volatilidade controlada, consolidando uma alocação otimizada e "
             "matematicamente superior."
         ),
     },
     "metricas": {
         "Explicação": (
             "As métricas de desempenho consolidam a avaliação quantitativa das carteiras analisadas. "
-            "O Retorno Anualizado mede o crescimento médio gerado ao longo do período, enquanto a "
-            "Volatilidade Anualizada mensura a dispersão dos retornos como proxy de risco total. "
-            "O Índice de Sharpe e o Índice de Sortino quantificam o retorno por unidade de risco total "
+            "O *Retorno Anualizado* mede o crescimento médio gerado ao longo do período, enquanto a "
+            "*Volatilidade Anualizada* mensura a dispersão dos retornos como proxy de risco total. "
+            "O *Índice de Sharpe* e o *Índice de Sortino* quantificam o retorno por unidade de risco total "
             "e de queda, respectivamente — valores superiores indicam melhor compensação pelo risco "
-            "assumido. O Drawdown Máximo revela a maior perda acumulada de pico a vale no período."
+            "assumido. O *Drawdown Máximo* revela a maior perda acumulada de pico a vale no período."
         ),
         "Análise Comparativa": (
-            "A carteira sugerida apresenta retorno anualizado de {ret_opt} frente a {ret_atual} da "
-            "carteira atual, um ganho de {ganho_ret} pontos percentuais com volatilidade de {vol_opt} "
+            "A carteira sugerida apresenta retorno anualizado de *{ret_opt}* frente a {ret_atual} da "
+            "carteira atual, *um ganho de {ganho_ret} pontos percentuais* com volatilidade de {vol_opt} "
             "(vs. {vol_atual}), demonstrando que o incremento de rentabilidade não implica risco "
-            "desproporcional. O índice de Sharpe avança de {sharpe_atual} para {sharpe_opt}, "
+            "desproporcional. O índice de Sharpe avança de {sharpe_atual} para *{sharpe_opt}*, "
             "evidenciando uma relação risco-retorno consideravelmente mais eficiente."
         ),
     },
@@ -790,12 +802,12 @@ _TEXTOS_PADRAO = {
             "se a carteira amplifica ou atenua a volatilidade do mercado em episódios de estresse."
         ),
         "Análise do Gráfico": (
-            "O gráfico demonstra que a carteira otimizada (linha azul escuro) mantém uma volatilidade "
-            "significativamente mais suave e controlada ao longo de todo o período analisado em comparação "
+            "O gráfico demonstra que a carteira otimizada (linha azul escuro) mantém uma "
+            "*volatilidade significativamente mais suave e controlada* ao longo de todo o período analisado em comparação "
             "com a carteira atual (linha azul claro). Ambas as carteiras experimentam picos em momentos "
             "de turbulência, porém a carteira otimizada absorve esses choques com menor intensidade. "
-            "A diversificação proposta reduz significativamente a exposição a movimentos erráticos de "
-            "mercado, resultando em uma jornada de investimento mais previsível e confortável para o "
+            "*A diversificação proposta reduz significativamente a exposição a movimentos erráticos de "
+            "mercado*, resultando em uma jornada de investimento mais previsível e confortável para o "
             "investidor."
         ),
     },
@@ -810,23 +822,23 @@ _TEXTOS_PADRAO = {
         ),
         "Análise do Gráfico": (
             "O gráfico revela uma diferença significativa entre as duas estratégias, especialmente em "
-            "períodos de crise. A carteira atual (linha azul claro) experimenta drawdowns mais profundos, "
+            "períodos de crise. A carteira atual (linha azul claro) experimenta *drawdowns mais profundos*, "
             "refletindo maior sensibilidade aos choques de mercado, enquanto a carteira otimizada (linha "
-            "azul escuro) limita suas perdas máximas de forma mais eficiente. A carteira otimizada "
+            "azul escuro) *limita suas perdas máximas de forma mais eficiente*. A carteira otimizada "
             "demonstra recuperação mais rápida após os períodos adversos, mantendo-se consistentemente "
             "acima da carteira atual durante momentos de estresse, evidenciando que a diversificação "
-            "não apenas reduz perdas, mas também acelera a recuperação do patrimônio."
+            "não apenas reduz perdas, mas também *acelera a recuperação do patrimônio*."
         ),
     },
     "correlacao": {
         "Explicação": (
             "A matriz de correlação quantifica o grau de co-movimento entre os retornos dos ativos. "
-            "Células em amarelo indicam alta correlação (≥ 0,7), sugerindo diversificação limitada "
-            "entre os pares. Células em azul refletem correlação moderada (0,4–0,7), e células em "
-            "vermelho (≤ −0,3) sinalizam ativos com tendência de movimentação oposta, que contribuem "
+            "Células em amarelo indicam *alta correlação (≥ 0,7)*, sugerindo diversificação limitada "
+            "entre os pares. Células em azul refletem *correlação moderada (0,4–0,7)*, e células em "
+            "vermelho (≤ −0,3) sinalizam *ativos com tendência de movimentação oposta*, que contribuem "
             "mais efetivamente para a redução do risco por diversificação. A diagonal em azul escuro "
             "representa a autocorrelação de cada ativo consigo mesmo (sempre igual a 1). Carteiras "
-            "com baixa correlação média tendem a apresentar menor volatilidade e drawdowns mais controlados."
+            "com baixa correlação média tendem a apresentar *menor volatilidade e drawdowns mais controlados*."
         ),
     },
 }
@@ -874,12 +886,12 @@ def _preencher_analise_metricas(texto, m):
         return texto
 
 
-def _oikos_layout(title="", xaxis_title="", yaxis_title="", **extra):
+def _yc_layout(title="", xaxis_title="", yaxis_title="", **extra):
     base = dict(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Futura, Arial, sans-serif", size=11, color="#00283C"),
-        title=dict(text=title, font=dict(size=13, color=_OIKOS_NAVY, family="Futura, Arial, sans-serif")),
+        font=dict(family="Raleway, Arial, sans-serif", size=11, color="#001441"),
+        title=dict(text=title, font=dict(size=13, color=_YC_NAVY, family="Raleway, Arial, sans-serif")),
         xaxis=dict(
             title=xaxis_title,
             showgrid=False,
@@ -893,7 +905,7 @@ def _oikos_layout(title="", xaxis_title="", yaxis_title="", **extra):
         legend=dict(
             orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
             bgcolor="rgba(255,255,255,0.85)", bordercolor="#D1D5DB", borderwidth=1,
-            font=dict(size=10, family="Futura, Arial, sans-serif"),
+            font=dict(size=10, family="Raleway, Arial, sans-serif"),
         ),
         margin=dict(l=55, r=20, t=50, b=45),
     )
@@ -909,7 +921,7 @@ def _make_cumret_fig(series_dict):
             x=s.index, y=(1 + s).cumprod(), mode="lines", name=lbl,
             line=dict(color=_REPORT_PALETTE[i % len(_REPORT_PALETTE)], width=2),
         ))
-    fig.update_layout(**_oikos_layout(
+    fig.update_layout(**_yc_layout(
         xaxis_title="Data", yaxis_title="Valor da Carteira",
     ))
     return fig
@@ -923,7 +935,7 @@ def _make_vol_fig(series_dict):
             x=s.index, y=s.rolling(30).std() * np.sqrt(252), mode="lines", name=lbl,
             line=dict(color=_REPORT_PALETTE[i % len(_REPORT_PALETTE)], width=2),
         ))
-    fig.update_layout(**_oikos_layout(
+    fig.update_layout(**_yc_layout(
         xaxis_title="Data", yaxis_title="Volatilidade Anualizada",
     ))
     return fig
@@ -941,7 +953,7 @@ def _make_dd_fig(series_dict):
             line=dict(color=color, width=2),
             fillcolor=f"rgba({r},{g},{b},0.15)",
         ))
-    fig.update_layout(**_oikos_layout(
+    fig.update_layout(**_yc_layout(
         xaxis_title="Data",
         yaxis=dict(
             title="Drawdown", tickformat=".1%",
@@ -961,7 +973,7 @@ def _make_corr_fig(returns_df):
 
     def _cell_bg(row_t, col_t):
         if row_t == col_t:
-            return _OIKOS_NAVY
+            return _YC_NAVY
         v = corr.loc[row_t, col_t]
         if v >= 0.7:  return "#FEF3C7"
         if v >= 0.4:  return "#DBEAFE"
@@ -970,25 +982,25 @@ def _make_corr_fig(returns_df):
 
     cell_values = [tickers]
     fill_colors = [["#EFF6FF"] * n]
-    font_colors = [["#0D2B3E"] * n]
+    font_colors = [["#001441"] * n]
 
     for col_t in tickers:
         cell_values.append([f"{corr.loc[row_t, col_t]:.2f}" for row_t in tickers])
         fill_colors.append([_cell_bg(row_t, col_t) for row_t in tickers])
-        font_colors.append(["#FFFFFF" if row_t == col_t else "#1E293B" for row_t in tickers])
+        font_colors.append(["#FFFFFF" if row_t == col_t else "#001441" for row_t in tickers])
 
     fig = go.Figure(go.Table(
         header=dict(
             values=[""] + tickers,
-            fill_color=_OIKOS_NAVY,
-            font=dict(color="white", size=10, family="Futura, Arial, sans-serif"),
+            fill_color=_YC_NAVY,
+            font=dict(color="white", size=10, family="Raleway, Arial, sans-serif"),
             align="center", height=30,
-            line=dict(color=_OIKOS_NAVY, width=1),
+            line=dict(color=_YC_NAVY, width=1),
         ),
         cells=dict(
             values=cell_values,
             fill_color=fill_colors,
-            font=dict(color=font_colors, size=10, family="Futura, Arial, sans-serif"),
+            font=dict(color=font_colors, size=10, family="Raleway, Arial, sans-serif"),
             align="center",
             height=26,
             line=dict(color="#E5E7EB", width=0.5),
@@ -1021,15 +1033,15 @@ def _make_metrics_fig(metrics_list):
     fill_colors = [row_fills] * len(headers)
     fig = go.Figure(go.Table(
         header=dict(
-            values=headers, fill_color=_OIKOS_NAVY,
-            font=dict(color="white", size=12, family="Futura, Arial, sans-serif"),
+            values=headers, fill_color=_YC_NAVY,
+            font=dict(color="white", size=12, family="Raleway, Arial, sans-serif"),
             align=["left"] + ["center"] * len(labels), height=38,
-            line=dict(color=_OIKOS_NAVY, width=0),
+            line=dict(color=_YC_NAVY, width=0),
         ),
         cells=dict(
             values=cell_values, fill_color=fill_colors,
             align=["left"] + ["center"] * len(labels),
-            font=dict(size=12, family="Futura, Arial, sans-serif", color="#1E293B"),
+            font=dict(size=12, family="Raleway, Arial, sans-serif", color="#001441"),
             height=34, line=dict(color="#E5E7EB", width=0.5),
         ),
     ))
@@ -1061,14 +1073,14 @@ def _make_allocation_table_fig(weights_atual, weights_sug):
     fill_colors = [row_fills] * len(headers)
     fig = go.Figure(go.Table(
         header=dict(
-            values=headers, fill_color=_OIKOS_NAVY,
-            font=dict(color="white", size=12, family="Futura, Arial, sans-serif"),
+            values=headers, fill_color=_YC_NAVY,
+            font=dict(color="white", size=12, family="Raleway, Arial, sans-serif"),
             align=["left"] + ["right"] * (len(headers) - 1), height=38,
-            line=dict(color=_OIKOS_NAVY, width=0),
+            line=dict(color=_YC_NAVY, width=0),
         ),
         cells=dict(
             values=cell_values, fill_color=fill_colors, align=col_align,
-            font=dict(size=12, family="Futura, Arial, sans-serif", color="#1E293B"),
+            font=dict(size=12, family="Raleway, Arial, sans-serif", color="#001441"),
             height=34, line=dict(color="#E5E7EB", width=0.5),
         ),
     ))
@@ -1106,18 +1118,21 @@ def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df,
     # Fixed image resolution — kaleido renders in pixels, independent of slide size
     px_w, px_h = 900, 400
 
-    # --- Capa: insere nome do cliente ---
+    # --- Capa: insere nome do cliente (canto inferior direito) ---
     capa = prs.slides[0]
-    txb = capa.shapes.add_textbox(_sw(0.83), _sh(5.75), _sw(5.16), _sh(0.65))
+    name_w = _sw(5.16)
+    name_h = _sh(0.65)
+    txb = capa.shapes.add_textbox(slide_w - margin_l - name_w, _sh(8.4), name_w, name_h)
     tf = txb.text_frame
     tf.word_wrap = True
     p = tf.paragraphs[0]
     run = p.add_run()
     run.text = client_name
+    run.font.name = "Raleway"
     run.font.size = _sf(22)
     run.font.bold = True
     run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-    p.alignment = PP_ALIGN.LEFT
+    p.alignment = PP_ALIGN.RIGHT
 
     # Padroniza label da carteira otimizada antes de construir métricas e figuras
     series_dict = {
@@ -1148,8 +1163,8 @@ def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df,
         run2.text = text
         run2.font.size = _sf(22)
         run2.font.bold = True
-        run2.font.name = "Futura"
-        run2.font.color.rgb = RGBColor(0x0D, 0x2B, 0x3E)
+        run2.font.name = "Raleway"
+        run2.font.color.rgb = RGBColor(0x00, 0x14, 0x41)
 
     def _add_image(slide, fig, left, top, width, height, px_w=900, px_h=400):
         png = _fig_to_png_bytes(fig, width=px_w, height=px_h)
@@ -1170,9 +1185,9 @@ def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df,
         if col_widths:
             for ci, cw in enumerate(col_widths):
                 tbl.columns[ci].width = int(cw)
-        _NAV = RGBColor(0x0D, 0x2B, 0x3E)
+        _NAV = RGBColor(0x00, 0x14, 0x41)
         _WHT = RGBColor(0xFF, 0xFF, 0xFF)
-        _DRK = RGBColor(0x1E, 0x29, 0x3B)
+        _DRK = RGBColor(0x00, 0x14, 0x41)
         _BG1 = RGBColor(0xFF, 0xFF, 0xFF)
         _BG2 = RGBColor(0xF3, 0xF4, 0xF6)
         for ci, hdr in enumerate(headers):
@@ -1185,7 +1200,7 @@ def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df,
             run.text = str(hdr)
             run.font.size = _sf(10)
             run.font.bold = True
-            run.font.name = "Futura"
+            run.font.name = "Raleway"
             run.font.color.rgb = _WHT
         for ri, row in enumerate(rows_data):
             default_bg = _BG1 if ri % 2 == 0 else _BG2
@@ -1208,7 +1223,7 @@ def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df,
                 run = p.add_run()
                 run.text = str(val)
                 run.font.size = _sf(10)
-                run.font.name = "Futura"
+                run.font.name = "Raleway"
                 run.font.color.rgb = (
                     cell_font_colors[ri][ci]
                     if cell_font_colors and ri < len(cell_font_colors)
@@ -1219,7 +1234,7 @@ def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df,
         return shape, total_h
 
     def _add_logo_slide(slide):
-        logo_path = "favicon.png"
+        logo_path = "icone_final.png"
         if not os.path.exists(logo_path):
             return
         try:
@@ -1257,7 +1272,7 @@ def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df,
         tf.margin_right = _sw(0.02)
         tf.margin_top   = _sh(0.02)
         tf.margin_bottom = _sh(0.02)
-        _TCOL = RGBColor(0x00, 0x28, 0x3C)
+        _TCOL = RGBColor(0x00, 0x14, 0x41)
         for i, para in enumerate(paras):
             p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
             p.alignment    = PP_ALIGN.JUSTIFY
@@ -1268,7 +1283,7 @@ def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df,
                     continue
                 run = p.add_run()
                 run.text           = seg
-                run.font.name      = "Futura"
+                run.font.name      = "Raleway"
                 run.font.size      = _sf(12)
                 run.font.bold      = (j % 2 == 1)
                 run.font.color.rgb = _TCOL
@@ -1350,7 +1365,7 @@ def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df,
             v = _corr.loc[rt, ct]
             row_vals.append(f"{v:.2f}")
             if rt == ct:
-                row_fills.append(RGBColor(0x0D, 0x2B, 0x3E))
+                row_fills.append(RGBColor(0x00, 0x14, 0x41))
                 row_fc.append(RGBColor(0xFF, 0xFF, 0xFF))
             elif v >= 0.7:
                 row_fills.append(RGBColor(0xFE, 0xF3, 0xC7)); row_fc.append(None)
@@ -1560,7 +1575,7 @@ def _render_report_ui(tab_key):
 
 def show_comparador():
     try:
-        logo = Image.open("Logo Oikos Horizontal Colorido.png")
+        logo = Image.open("logo_final.png")
         st.image(logo, use_container_width=False, width=800)
 
         if "synthetic_assets" not in st.session_state:
@@ -2004,7 +2019,7 @@ def show_comparador():
                             marker=dict(color=_REPORT_PALETTE[1], size=14, symbol="star"),
                             text=["Otimizada"], textposition="top center",
                         ))
-                        _fig_frontier_report.update_layout(**_oikos_layout(
+                        _fig_frontier_report.update_layout(**_yc_layout(
                             xaxis_title="Risco",
                             yaxis_title="Retorno Esperado",
                         ))

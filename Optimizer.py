@@ -41,7 +41,7 @@ def show_optimizer():
         #st.set_page_config(page_title="Portfolio Optimizer", layout="wide")
 
         # --- LOGO ---
-        logo = Image.open("Logo Oikos Horizontal Colorido.png")
+        logo = Image.open("logo_final.png")
         st.image(logo, use_container_width=False, width=800)
 
 

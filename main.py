@@ -9,8 +9,8 @@ import streamlit.components.v1 as components
 
 # Configurações da página
 st.set_page_config(
-    page_title='Oikos MFO',
-    page_icon="favicon.png",
+    page_title='Your Capital',
+    page_icon="icone_final.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -56,8 +56,8 @@ with st.sidebar:
 
 # Página: HOME
 if selected == "Home":
-    logo = Image.open("Logo Oikos Vertical Colorido.png")
-    st.image(logo, width=800)
+    logo = Image.open("yourcapital_img.jpg")
+    st.image(logo, use_container_width=True)
    
 
 elif selected == "Otimizador de Portfólio":

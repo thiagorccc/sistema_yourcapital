@@ -66,7 +66,7 @@ def criar_candlestick(dados, titulo, nome_serie="", yaxis_titulo="Pontos", tickf
         height=500,
         margin=dict(l=40, r=25, t=55, b=35),
         xaxis_rangeslider_visible=False,
-        font=dict(family="Futura", size=12),
+        font=dict(family="Raleway", size=12),
     )
 
     fig.update_yaxes(tickformat=tickformat)
@@ -480,7 +480,7 @@ def grafico_painel_mercado(data_inicio_semana=None, data_fim_semana=None):
             header=dict(
                 values=[f"<b>{h}</b>" if h else "" for h in header_labels],
                 fill_color="white", line_color="white",
-                font=dict(family="Futura", size=13, color=PRETO),
+                font=dict(family="Raleway", size=13, color=PRETO),
                 align="center",
                 height=28 if tem_header else 2,
             ),
@@ -488,7 +488,7 @@ def grafico_painel_mercado(data_inicio_semana=None, data_fim_semana=None):
                 values=cell_values,
                 fill_color="white", line_color="white",
                 align=["left", "right", "right"],
-                font=dict(family="Futura", size=13, color=cell_colors),
+                font=dict(family="Raleway", size=13, color=cell_colors),
                 height=26,
             ),
             **kwargs,
@@ -542,7 +542,7 @@ def grafico_painel_mercado(data_inicio_semana=None, data_fim_semana=None):
                 f"<span style='font-size:26px; color:{PRETO}'>{ibov_str}  "
                 f"<span style='color:{cor_titulo}'>{var_str}</span></span>"
             ),
-            font=dict(family="Futura", size=34, color=PRETO),
+            font=dict(family="Raleway", size=34, color=PRETO),
             x=0.01, xanchor="left",
         ),
         width=800,
@@ -552,7 +552,7 @@ def grafico_painel_mercado(data_inicio_semana=None, data_fim_semana=None):
         template="plotly_white",
         showlegend=False,
         margin=dict(l=20, r=20, t=115, b=10),
-        font=dict(family="Futura"),
+        font=dict(family="Raleway"),
     )
 
     fig.update_xaxes(rangeslider_visible=False, row=1, col=1)
