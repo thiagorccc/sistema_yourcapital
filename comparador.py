@@ -1769,6 +1769,14 @@ def show_comparador():
                         st.session_state["alloc_g_max"] = g_max_t1
                         st.session_state["alloc_per_asset"] = per_asset_t1
                         st.session_state["alloc_groups"] = groups_t1
+                        # Estes data_editors não são renderizados enquanto a tela de
+                        # resultados estiver visível. Remover as chaves explicitamente
+                        # (em vez de depender do momento em que o Streamlit faz essa
+                        # limpeza sozinho) garante que, ao clicar em "Voltar", o editor
+                        # sempre seja reidratado a partir do snapshot — inclusive em
+                        # ciclos repetidos de Executar → Voltar.
+                        for _k in ("t1_atual_editor", "alloc_override_comparador_t1", "alloc_groups_comparador_t1"):
+                            st.session_state.pop(_k, None)
                         st.rerun()
 
             else:
@@ -2249,6 +2257,10 @@ def show_comparador():
                             st.session_state["simples_start"] = start_date_s
                             st.session_state["simples_end"] = end_date_s
                             st.session_state["simples_ready"] = True
+                            # Ver comentário equivalente na aba 1 — garante reidratação
+                            # correta a partir do snapshot em ciclos repetidos.
+                            for _k in ("t2_atual_editor", "t2_sugerida_editor"):
+                                st.session_state.pop(_k, None)
                             st.rerun()
 
             else:
