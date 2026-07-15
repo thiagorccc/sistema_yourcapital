@@ -287,13 +287,20 @@ def _render_constraints_expander(tickers, key_prefix):
         })
         _override_snap = f"alloc_override_snap_{key_prefix}"
         _override_key  = f"alloc_override_{key_prefix}"
-        _init_override = (
-            st.session_state[_override_snap]
-            if _override_key not in st.session_state and _override_snap in st.session_state
-            else empty_override
-        )
+        _override_seed = f"alloc_override_seed_{key_prefix}"
+        # A semente só pode mudar de valor no render em que a chave do widget é
+        # (re)criada — passar dados diferentes em qualquer render subsequente,
+        # mesmo com a chave já existindo, faz o Streamlit perder a correlação
+        # com o que está sendo editado (mesma causa do reset da tabela de
+        # ativos após "Voltar", já corrigido em _portfolio_editor).
+        if _override_key not in st.session_state:
+            st.session_state[_override_seed] = (
+                st.session_state[_override_snap].copy()
+                if _override_snap in st.session_state
+                else empty_override
+            )
         override_df = st.data_editor(
-            _init_override,
+            st.session_state[_override_seed],
             num_rows="dynamic",
             column_config={
                 "Ativo":   st.column_config.SelectboxColumn("Ativo", options=ticker_opts, required=True),
@@ -315,13 +322,16 @@ def _render_constraints_expander(tickers, key_prefix):
         })
         _groups_snap = f"alloc_groups_snap_{key_prefix}"
         _groups_key  = f"alloc_groups_{key_prefix}"
-        _init_groups = (
-            st.session_state[_groups_snap]
-            if _groups_key not in st.session_state and _groups_snap in st.session_state
-            else empty_groups
-        )
+        _groups_seed = f"alloc_groups_seed_{key_prefix}"
+        # Mesma lógica de semente congelada usada acima para o override_df.
+        if _groups_key not in st.session_state:
+            st.session_state[_groups_seed] = (
+                st.session_state[_groups_snap].copy()
+                if _groups_snap in st.session_state
+                else empty_groups
+            )
         group_df = st.data_editor(
-            _init_groups,
+            st.session_state[_groups_seed],
             num_rows="dynamic",
             column_config={
                 "Nome do Grupo":             st.column_config.TextColumn("Nome do Grupo"),
@@ -369,37 +379,123 @@ def _build_opt_constraints(ordered_tickers, groups):
     return cons
 
 
-def _portfolio_editor(default_symbols, default_weights, ticker_options, ticker_lookup, key_prefix):
-    editor_key   = f"{key_prefix}_editor"
-    snapshot_key = f"{key_prefix}_snapshot"
+_CURRENCY_SYMBOLS = {"Real": "R$", "Dollar": "US$", "Euro": "€"}
+_MODE_PCT = "Percentual (%)"
+_MODE_VAL = "Valor financeiro"
 
-    # Use snapshot only when the editor key has been removed from session state
-    # (e.g. after "Voltar" or synthetic asset creation resets the widget).
-    # Do NOT pass snapshot on every render — Streamlit accumulates deltas on top
-    # of the `data` param, causing every edit to be applied twice.
-    if editor_key not in st.session_state and snapshot_key in st.session_state:
-        default_data = st.session_state[snapshot_key].copy()
+
+def _portfolio_editor(default_symbols, default_weights, ticker_options, ticker_lookup, key_prefix, currency_choice="Real"):
+    editor_key       = f"{key_prefix}_editor"
+    snapshot_key     = f"{key_prefix}_snapshot"
+    seed_key         = f"{key_prefix}_seed"
+    editor_key_val   = f"{key_prefix}_editor_val"
+    snapshot_key_val = f"{key_prefix}_snapshot_val"
+    seed_key_val     = f"{key_prefix}_seed_val"
+    mode_key         = f"{key_prefix}_mode"
+    mode_bak_key     = f"{mode_key}_bak"
+    total_key        = f"{key_prefix}_total_value"
+    total_bak_key    = f"{total_key}_bak"
+    sym = _CURRENCY_SYMBOLS.get(currency_choice, "R$")
+
+    # Modo de preenchimento (% ou valor financeiro). Restaurado via chave
+    # "_bak" — mesmo idioma já usado em _render_constraints_expander para
+    # widgets simples que somem do session_state quando "Voltar" esconde o
+    # bloco. Cada modo mantém seus próprios dados de forma independente —
+    # não há conversão automática ao alternar entre eles.
+    if mode_key not in st.session_state:
+        st.session_state[mode_key] = st.session_state.get(mode_bak_key, _MODE_PCT)
+    mode = st.radio("Preencher alocação por:", [_MODE_PCT, _MODE_VAL], key=mode_key, horizontal=True)
+    st.session_state[mode_bak_key] = mode
+
+    if mode == _MODE_VAL:
+        if total_key not in st.session_state:
+            st.session_state[total_key] = st.session_state.get(total_bak_key, 1_000_000.0)
+        total_value = st.number_input(
+            f"Valor total da carteira ({sym})",
+            min_value=0.0, value=1_000_000.0, step=10_000.0, format="%.2f",
+            key=total_key,
+        )
+        st.session_state[total_bak_key] = total_value
     else:
-        default_data = pd.DataFrame({
-            "Ticker": [f"{symbol_info.get(s, s)} [{s}]" for s in default_symbols],
-            "Weight": [w * 100 for w in default_weights],
-        })
+        total_value = st.session_state.get(total_bak_key, 1_000_000.0)
 
-    display = st.data_editor(
-        default_data,
-        num_rows="dynamic",
-        column_config={
-            "Ticker": st.column_config.SelectboxColumn("Ativo", options=ticker_options),
-            "Weight": st.column_config.NumberColumn("Peso (%)", min_value=0.0, max_value=100.0, step=0.01, format="%.2f"),
-        },
-        hide_index=True,
-        key=editor_key,
-    )
-    st.session_state[snapshot_key] = display.reset_index(drop=True).copy()
-    portfolio = display.dropna(subset=["Ticker"]).copy()
-    portfolio["Ticker"] = portfolio["Ticker"].map(ticker_lookup)
-    portfolio["Weight"] = portfolio["Weight"] / 100
-    weight_sum = portfolio["Weight"].sum() * 100
+    if mode == _MODE_PCT:
+        # `default_data` só pode mudar de valor no render em que a chave do
+        # widget é (re)criada — Streamlit rastreia as edições do usuário como
+        # deltas relativos ao `data=` daquele momento, então se o `data=`
+        # passado mudar em qualquer render subsequente (mesmo com a chave já
+        # existindo), o widget perde a correlação com o que está editando e
+        # tanto duplica edições quanto, silenciosamente, volta a exibir o novo
+        # `data=` para células nunca tocadas nesta "vida" do widget. Por isso
+        # a semente é calculada uma única vez (ao criar/recriar a chave, ex.:
+        # após "Voltar") e fica congelada em `seed_key` enquanto o widget
+        # existir; o snapshot (sempre atualizado) só é lido para gerar essa
+        # semente, nunca passado direto como `data=`.
+        if editor_key not in st.session_state:
+            if snapshot_key in st.session_state:
+                st.session_state[seed_key] = st.session_state[snapshot_key].copy()
+            else:
+                st.session_state[seed_key] = pd.DataFrame({
+                    "Ticker": [f"{symbol_info.get(s, s)} [{s}]" for s in default_symbols],
+                    "Weight": [w * 100 for w in default_weights],
+                })
+        default_data = st.session_state[seed_key]
+
+        display = st.data_editor(
+            default_data,
+            num_rows="dynamic",
+            column_config={
+                "Ticker": st.column_config.SelectboxColumn("Ativo", options=ticker_options),
+                "Weight": st.column_config.NumberColumn("Peso (%)", min_value=0.0, max_value=100.0, step=0.01, format="%.2f"),
+            },
+            hide_index=True,
+            key=editor_key,
+        )
+        st.session_state[snapshot_key] = display.reset_index(drop=True).copy()
+        portfolio = display.dropna(subset=["Ticker"]).copy()
+        portfolio["Ticker"] = portfolio["Ticker"].map(ticker_lookup)
+        portfolio["Weight"] = portfolio["Weight"] / 100
+        weight_sum = portfolio["Weight"].sum() * 100
+
+    else:  # _MODE_VAL
+        # Mesma lógica de semente congelada do ramo percentual — ver comentário acima.
+        if editor_key_val not in st.session_state:
+            if snapshot_key_val in st.session_state:
+                st.session_state[seed_key_val] = st.session_state[snapshot_key_val].copy()
+            else:
+                st.session_state[seed_key_val] = pd.DataFrame({
+                    "Ticker": [f"{symbol_info.get(s, s)} [{s}]" for s in default_symbols],
+                    "Valor": [w * total_value for w in default_weights],
+                })
+        default_data_val = st.session_state[seed_key_val]
+
+        display_val = st.data_editor(
+            default_data_val,
+            num_rows="dynamic",
+            column_config={
+                "Ticker": st.column_config.SelectboxColumn("Ativo", options=ticker_options),
+                "Valor": st.column_config.NumberColumn(f"Valor ({sym})", min_value=0.0, step=100.0, format="%.2f"),
+            },
+            hide_index=True,
+            key=editor_key_val,
+        )
+        st.session_state[snapshot_key_val] = display_val.reset_index(drop=True).copy()
+        portfolio = display_val.dropna(subset=["Ticker"]).copy()
+        portfolio["Ticker"] = portfolio["Ticker"].map(ticker_lookup)
+        if total_value > 0:
+            portfolio["Weight"] = portfolio["Valor"] / total_value
+        else:
+            portfolio["Weight"] = 0.0
+            st.warning("Informe um valor total da carteira maior que zero para calcular os pesos.")
+        portfolio = portfolio.drop(columns=["Valor"])
+        weight_sum = portfolio["Weight"].sum() * 100
+
+        alocado = display_val["Valor"].fillna(0).sum()
+        # Escapa "$" — com dois símbolos de moeda na mesma string (ex.: "R$ ... de R$ ..."),
+        # o st.caption interpretaria o trecho entre eles como LaTeX (delimitador $...$).
+        _valor_alocado_txt = f"Valor alocado: {_brl(alocado, symbol=sym)} de {_brl(total_value, symbol=sym)}"
+        st.caption(_valor_alocado_txt.replace("$", "\\$"))
+
     st.markdown(f"**Alocação Total: {weight_sum:.2f}%**")
     return portfolio, weight_sum
 
@@ -742,12 +838,12 @@ _REPORT_PALETTE = ["#60A5FA", "#1E3A8A", "#DC2626", "#059669", "#7C3AED", "#0891
 _YC_NAVY = "#001441"
 
 
-def _brl(value, decimals=2):
-    """Format a number in Brazilian Real style: R$ 1.234.567,89"""
+def _brl(value, decimals=2, symbol="R$"):
+    """Format a number in Brazilian-style thousands/decimals: R$ 1.234.567,89"""
     s = f"{abs(value):,.{decimals}f}"
     s = s.replace(",", "X").replace(".", ",").replace("X", ".")
     sign = "-" if value < 0 else ""
-    return f"R$ {sign}{s}"
+    return f"{symbol} {sign}{s}"
 
 
 # ---------------------------------------------------------------------------
@@ -1616,8 +1712,10 @@ def show_comparador():
                 st.markdown("Selecione os ativos da sua carteira atual e seus respectivos pesos.")
                 _render_synth_expander("t1", ticker_options, ticker_lookup)
 
+                _currency_t1 = st.session_state.get("currency_comparador", "Real")
                 user_portfolio, weight_sum = _portfolio_editor(
-                    default_symbols, default_weights, ticker_options, ticker_lookup, "t1_atual"
+                    default_symbols, default_weights, ticker_options, ticker_lookup, "t1_atual",
+                    currency_choice=_currency_t1,
                 )
 
                 _peso_invalido = abs(weight_sum - 100) > 0.01
@@ -1775,7 +1873,7 @@ def show_comparador():
                         # limpeza sozinho) garante que, ao clicar em "Voltar", o editor
                         # sempre seja reidratado a partir do snapshot — inclusive em
                         # ciclos repetidos de Executar → Voltar.
-                        for _k in ("t1_atual_editor", "alloc_override_comparador_t1", "alloc_groups_comparador_t1"):
+                        for _k in ("t1_atual_editor", "t1_atual_editor_val", "alloc_override_comparador_t1", "alloc_groups_comparador_t1"):
                             st.session_state.pop(_k, None)
                         st.rerun()
 
@@ -2165,9 +2263,11 @@ def show_comparador():
 
             if not st.session_state["simples_ready"]:
                 _render_synth_expander("t2", ticker_options, ticker_lookup)
+                _currency_t2 = st.session_state.get("currency_simples", "Real")
                 st.markdown("#### Carteira Atual")
                 atual_portfolio, weight_sum_atual = _portfolio_editor(
-                    default_symbols, default_weights, ticker_options, ticker_lookup, "t2_atual"
+                    default_symbols, default_weights, ticker_options, ticker_lookup, "t2_atual",
+                    currency_choice=_currency_t2,
                 )
                 valida_atual = abs(weight_sum_atual - 100) <= 0.01
                 if not valida_atual:
@@ -2180,7 +2280,8 @@ def show_comparador():
                 if incluir_sugerida:
                     st.markdown("#### Carteira Sugerida")
                     sugerida_portfolio, weight_sum_sug = _portfolio_editor(
-                        default_symbols, default_weights, ticker_options, ticker_lookup, "t2_sugerida"
+                        default_symbols, default_weights, ticker_options, ticker_lookup, "t2_sugerida",
+                        currency_choice=_currency_t2,
                     )
                     valida_sugerida = abs(weight_sum_sug - 100) <= 0.01
                     if not valida_sugerida:
@@ -2259,7 +2360,7 @@ def show_comparador():
                             st.session_state["simples_ready"] = True
                             # Ver comentário equivalente na aba 1 — garante reidratação
                             # correta a partir do snapshot em ciclos repetidos.
-                            for _k in ("t2_atual_editor", "t2_sugerida_editor"):
+                            for _k in ("t2_atual_editor", "t2_atual_editor_val", "t2_sugerida_editor", "t2_sugerida_editor_val"):
                                 st.session_state.pop(_k, None)
                             st.rerun()
 
