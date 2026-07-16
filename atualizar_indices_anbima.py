@@ -88,6 +88,15 @@ CODIGO_PARA_ARQUIVO = {
 
 _NOME_ARQUIVO_RE = re.compile(r"^([A-Z0-9]+)-HISTORICO(?:\s*\(\d+\))?\.xlsx?$", re.IGNORECASE)
 
+# Datas com retorno espúrio conhecido no export da ANBIMA (erro da fonte, não
+# do sistema) — removidas sempre que o índice é reprocessado a partir de um
+# novo export em Anbima/.
+_EXCLUSOES_CONHECIDAS = {
+    # 09/04/2021: retorno de +105,86% num único dia, com os dias ao redor
+    # variando entre -0,3% e +0,3% — claramente um erro de exportação.
+    "IMAB5": [pd.Timestamp("2021-04-09")],
+}
+
 
 def _codigo_do_arquivo(nome_arquivo):
     m = _NOME_ARQUIVO_RE.match(nome_arquivo)
@@ -113,7 +122,7 @@ def _agrupar_por_codigo(pasta):
     return candidatos
 
 
-def _normalizar(path):
+def _normalizar(path, codigo=None):
     df = pd.read_excel(path)
     df = df[["Data de Referência", "Variação Diária (%)"]].rename(
         columns={"Data de Referência": "Data", "Variação Diária (%)": "Retorno"}
@@ -122,6 +131,9 @@ def _normalizar(path):
     df = df.dropna(subset=["Data"])
     df = df.sort_values("Data")
     df = df[~df["Data"].duplicated(keep="last")]
+    datas_excluidas = _EXCLUSOES_CONHECIDAS.get(codigo, [])
+    if datas_excluidas:
+        df = df[~df["Data"].isin(datas_excluidas)]
     return df.reset_index(drop=True)
 
 
@@ -246,7 +258,7 @@ def main():
     for codigo, path in sorted(candidatos.items()):
         nome_saida = CODIGO_PARA_ARQUIVO.get(codigo, f"{codigo}.xlsx")
         try:
-            df = _normalizar(path)
+            df = _normalizar(path, codigo=codigo)
         except Exception as e:
             print(f"[{codigo}] erro ao processar '{os.path.basename(path)}': {e}", file=sys.stderr)
             continue

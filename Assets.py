@@ -825,6 +825,7 @@ symbol_br_indices = {
     "IDA-DI":            "IDA-DI (Debêntures DI)",
     "IDA-GERAL":         "IDA-GERAL (Debêntures Geral)",
     "IDA-IPCA INFRA":    "IDA-IPCA Infraestrutura",
+    "IDA-IPCA INFRA GROSSUP": "IDA-IPCA Infra Gross-up (Equivalente Tributado)",
     "IDA-IPCA EX-INFRA": "IDA-IPCA ex-Infraestrutura",
     "IDA-LIQ DI":        "IDA-LIQ DI (Debêntures líquidas DI)",
     "IDA-LIQ GERAL":     "IDA-LIQ Geral (Debêntures líquidas)",
@@ -1070,6 +1071,15 @@ def _load_all_br_indices():
             series[col] = _anbima_excel(fname)
         except Exception as e:
             print(f"[Assets] {col} load error: {e}", file=sys.stderr)
+
+    # Série derivada: a ANBIMA divulga o IDA-IPCA Infraestrutura como retorno
+    # de mercado puro (sem ajuste de imposto — confirmado na metodologia
+    # oficial do índice). Como a debênture incentivada é isenta de IR,
+    # dividir o retorno diário por 0,85 (1 - 15%, alíquota mínima da tabela
+    # regressiva) dá o equivalente bruto tributado, comparável a papéis sem
+    # isenção.
+    if "IDA-IPCA INFRA" in series:
+        series["IDA-IPCA INFRA GROSSUP"] = series["IDA-IPCA INFRA"] / 0.85
 
     try:
         path = _os.path.join(_BASE_DIR, "IFIX.xlsx")

@@ -2045,10 +2045,21 @@ def show_comparador():
                     else:
                         frontier_df["Sharpe"] = frontier_df["Return"] / frontier_df["Risk"]
 
+                        # A curva contém as duas pernas da "bala" de Markowitz: o ramo
+                        # eficiente (retorno cresce com o risco) e o ramo dominado
+                        # (mesmo risco, retorno menor). Sem filtrar isso, o ponto de
+                        # "Mesmo Risco"/"Mesmo Retorno" mais próximo por distância pode
+                        # cair no ramo dominado. Extrai apenas o envelope superior
+                        # (Pareto-eficiente): ordena por risco crescente e mantém só os
+                        # pontos que batem um novo recorde de retorno.
+                        _sorted_by_risk = frontier_df.sort_values("Risk").reset_index(drop=True)
+                        _cummax_ret = _sorted_by_risk["Return"].cummax()
+                        efficient_df = _sorted_by_risk[_sorted_by_risk["Return"] >= _cummax_ret].reset_index(drop=True)
+
                         target_return = port_ret(weights_vector)
                         target_risk = port_risk(weights_vector)
-                        same_risk_opt = frontier_df.iloc[(frontier_df["Risk"] - target_risk).abs().argmin()]
-                        same_return_opt = frontier_df.iloc[(frontier_df["Return"] - target_return).abs().argmin()]
+                        same_risk_opt = efficient_df.iloc[(efficient_df["Risk"] - target_risk).abs().argmin()]
+                        same_return_opt = efficient_df.iloc[(efficient_df["Return"] - target_return).abs().argmin()]
 
                         prog.progress(82, text="Gerando gráfico da fronteira...")
                         st.markdown("### Selecione a Carteira Otimizada para Backtesting")
@@ -2067,13 +2078,13 @@ def show_comparador():
                         else:
                             risco_sel = st.slider(
                                 "Nível de risco da carteira otimizada:",
-                                min_value=float(frontier_df["Risk"].min()),
-                                max_value=float(frontier_df["Risk"].max()),
+                                min_value=float(efficient_df["Risk"].min()),
+                                max_value=float(efficient_df["Risk"].max()),
                                 value=float(same_risk_opt["Risk"]),
                                 format="%.4f",
                                 key="risk_slider_comparador",
                             )
-                            ponto_sel = frontier_df.iloc[(frontier_df["Risk"] - risco_sel).abs().argmin()]
+                            ponto_sel = efficient_df.iloc[(efficient_df["Risk"] - risco_sel).abs().argmin()]
                             label_opt = "Otimizado - Personalizado"
 
                         selected_weights = ponto_sel["Weights"]
@@ -2081,7 +2092,7 @@ def show_comparador():
                         st.caption(f"Método de construção da fronteira: {risk_measure_comparador}")
                         st.markdown("### Fronteira Eficiente & Comparação de Carteiras")
                         fig_f = go.Figure()
-                        fig_f.add_trace(go.Scatter(x=frontier_df["Risk"], y=frontier_df["Return"], mode="lines", name="Fronteira Eficiente"))
+                        fig_f.add_trace(go.Scatter(x=efficient_df["Risk"], y=efficient_df["Return"], mode="lines", name="Fronteira Eficiente"))
                         fig_f.add_trace(go.Scatter(x=[target_risk], y=[target_return], mode="markers+text", marker=dict(color="red", size=12), name="Carteira Atual", text=["Atual"], textposition="top center"))
                         fig_f.add_trace(go.Scatter(x=[same_risk_opt["Risk"]], y=[same_risk_opt["Return"]], mode="markers+text", marker=dict(color="green", size=10, symbol="diamond"), name="Mesmo Risco", text=["↑ Retorno"], textposition="bottom center"))
                         fig_f.add_trace(go.Scatter(x=[same_return_opt["Risk"]], y=[same_return_opt["Return"]], mode="markers+text", marker=dict(color="blue", size=10, symbol="diamond"), name="Mesmo Retorno", text=["↓ Risco"], textposition="bottom center"))
@@ -2097,7 +2108,7 @@ def show_comparador():
                         # Versão limpa da fronteira para o relatório PPTX
                         _fig_frontier_report = go.Figure()
                         _fig_frontier_report.add_trace(go.Scatter(
-                            x=frontier_df["Risk"], y=frontier_df["Return"],
+                            x=efficient_df["Risk"], y=efficient_df["Return"],
                             mode="lines", name="Fronteira Eficiente",
                             line=dict(color=_REPORT_PALETTE[0], width=2),
                         ))
