@@ -1184,13 +1184,13 @@ def _make_allocation_table_fig(weights_atual, weights_sug):
     return fig
 
 
-def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df, weights_atual, weights_sug, benchmark_label, frontier_fig=None, slide_texts=None):
+def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df, weights_atual, weights_sug, benchmark_label, frontier_fig=None, slide_texts=None, template_path="analise.pptx"):
     from pptx import Presentation
     from pptx.util import Pt
     from pptx.dml.color import RGBColor
     from pptx.enum.text import PP_ALIGN
 
-    prs = Presentation("analise.pptx")
+    prs = Presentation(template_path)
     slide_w = prs.slide_width
     slide_h = prs.slide_height
     # Proportional scaling helpers — calibrated for A4 portrait (8.264 × 11.694 in).
@@ -1554,8 +1554,16 @@ def _render_report_ui(tab_key):
     if not st.session_state.get(series_key):
         return
 
+    _MODELOS_RELATORIO = {"Relatório 1": "analise.pptx", "Relatório 2": "analise1.pptx"}
+
     st.markdown("---")
     with st.expander("Gerar Relatório PPTX", expanded=False):
+        r_modelo = st.radio(
+            "Modelo do relatório:",
+            list(_MODELOS_RELATORIO.keys()),
+            key=f"{tab_key}_r_modelo",
+            horizontal=True,
+        )
         r_client = st.text_input("Nome do cliente", key=f"{tab_key}_r_client")
         r_value  = st.number_input(
             "Valor total da carteira (R$)",
@@ -1652,6 +1660,7 @@ def _render_report_ui(tab_key):
                         st.session_state.get(bm_key),
                         frontier_fig=st.session_state.get(f"{tab_key}_frontier_fig"),
                         slide_texts=slide_texts,
+                        template_path=_MODELOS_RELATORIO[r_modelo],
                     )
                 st.session_state[buf_key]  = report_bytes
                 st.session_state[name_key] = r_client.strip()
