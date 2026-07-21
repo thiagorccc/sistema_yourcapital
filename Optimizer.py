@@ -13,7 +13,139 @@ import time
 import plotly.figure_factory as ff
 
 from Assets import symbol_real, symbol_dolar, symbol_euro, symbol_br_indices, load_br_indices, BR_BENCH_TICKERS
-from comparador import _tabela_rentabilidade_mensal, _calcular_metricas, _exibir_metricas, _compute_synthetic_returns, _get_rf_rate, _render_synth_expander, _render_constraints_expander, _build_opt_constraints
+from comparador import _tabela_rentabilidade_mensal, _calcular_metricas, _exibir_metricas, _compute_synthetic_returns, _get_rf_rate, _render_synth_expander, _render_constraints_expander, _build_opt_constraints, _render_report_ui, _yc_layout, _REPORT_PALETTE
+
+
+# ---------------------------------------------------------------------------
+# Textos pré-prontos para o relatório PPTX do Optimizer — mesma estrutura de
+# _TEXTOS_PADRAO em comparador.py, mas comparando a carteira otimizada com o
+# benchmark escolhido (o Optimizer não tem uma "carteira atual" para comparar).
+# Volatilidade e Drawdown ficam com texto genérico, sem comparação direta com
+# o benchmark: contra um benchmark como o CDI essa comparação é trivial (o
+# CDI praticamente não tem drawdown/volatilidade) e não agrega à análise.
+# ---------------------------------------------------------------------------
+_TEXTOS_PADRAO_OPT = {
+    "fronteira": {
+        "Explicação": (
+            "A *fronteira eficiente* é o conjunto de carteiras que oferecem o máximo retorno esperado "
+            "para cada nível de risco aceitável, ou equivalentemente, o mínimo risco para cada nível "
+            "de retorno desejado. Construída através da teoria moderna de portfolio (Média-Variância), "
+            "ela representa as combinações ótimas de ativos que eliminam o risco não-sistemático através "
+            "da diversificação. Qualquer carteira localizada abaixo da fronteira é considerada *ineficiente*, "
+            "pois oferece menor retorno para o mesmo risco ou maior risco para o mesmo retorno."
+        ),
+        "Análise do Gráfico": (
+            "A carteira selecionada se posiciona na fronteira eficiente com retorno de {port_ret} e "
+            "risco de {port_risco}, representando a combinação matematicamente ótima entre os ativos "
+            "analisados para o nível de risco assumido. Para referência, o benchmark {benchmark_label} "
+            "apresentou retorno de {bench_ret} no mesmo período. *A escolha do ponto da fronteira deve "
+            "refletir o apetite de risco do investidor*, já que pontos mais à direita da curva oferecem "
+            "maior retorno esperado em troca de maior volatilidade."
+        ),
+    },
+    "metricas": {
+        "Explicação": (
+            "As métricas de desempenho consolidam a avaliação quantitativa da carteira analisada. "
+            "O *Retorno Anualizado* mede o crescimento médio gerado ao longo do período, enquanto a "
+            "*Volatilidade Anualizada* mensura a dispersão dos retornos como proxy de risco total. "
+            "O *Índice de Sharpe* e o *Índice de Sortino* quantificam o retorno por unidade de risco total "
+            "e de queda, respectivamente — valores superiores indicam melhor compensação pelo risco "
+            "assumido. O *Drawdown Máximo* revela a maior perda acumulada de pico a vale no período."
+        ),
+        "Análise Comparativa": (
+            "A carteira otimizada apresenta retorno anualizado de *{ret_port}* frente a {ret_bench} do "
+            "benchmark {benchmark_label}, com volatilidade de {vol_port} (vs. {vol_bench}). O índice de "
+            "Sharpe da carteira é de *{sharpe_port}*, e o drawdown máximo observado no período foi de "
+            "{dd_port}. *Esses números consolidam o desempenho da estratégia de alocação ao longo do "
+            "período analisado*, servindo de referência para o acompanhamento futuro da carteira."
+        ),
+    },
+    "volatilidade": {
+        "Explicação": (
+            "A volatilidade móvel de 30 dias mensura a oscilação dos retornos em janelas rolantes de "
+            "um mês, expressando o risco de forma dinâmica ao longo do tempo. Períodos de maior "
+            "volatilidade sinalizam incerteza elevada no mercado ou eventos específicos que afetam "
+            "os ativos da carteira, enquanto ciclos de menor volatilidade indicam estabilidade relativa. "
+            "A análise temporal desta métrica permite identificar regimes de risco distintos e avaliar "
+            "se a carteira amplifica ou atenua a volatilidade do mercado em episódios de estresse."
+        ),
+        "Análise do Gráfico": (
+            "O gráfico acompanha a volatilidade da carteira em janelas móveis de 30 dias ao longo do "
+            "período analisado, evidenciando os momentos de maior e menor oscilação dos retornos. A "
+            "comparação com o benchmark selecionado ajuda a contextualizar o nível de risco assumido "
+            "pela carteira frente a uma referência de mercado. *Picos de volatilidade tendem a coincidir "
+            "com períodos de maior incerteza ou estresse nos mercados*, sendo esperado que a intensidade "
+            "dessas oscilações varie conforme a composição e o grau de diversificação da carteira."
+        ),
+    },
+    "drawdown": {
+        "Explicação": (
+            "O gráfico de drawdown representa a queda acumulada da carteira em relação ao seu pico "
+            "histórico mais recente. Quanto maior a profundidade e a duração do drawdown, maior o impacto "
+            "sobre o patrimônio e mais exigente o processo de recuperação. Drawdowns prolongados ou severos "
+            "indicam exposição elevada a fatores de risco sistemático ou concentração em ativos "
+            "correlacionados. A análise permite avaliar o quão exigente pode ser o processo de "
+            "recuperação da carteira em períodos de turbulência do mercado."
+        ),
+        "Análise do Gráfico": (
+            "O gráfico mostra a evolução do drawdown da carteira ao longo do tempo, isto é, a distância "
+            "entre o valor atual e o pico mais recente atingido. Momentos de queda mais acentuada refletem "
+            "períodos de maior estresse de mercado ou concentração em ativos correlacionados, enquanto a "
+            "velocidade de recuperação após esses eventos indica a resiliência da alocação escolhida. "
+            "*A comparação com o benchmark selecionado serve como referência* para avaliar se o perfil de "
+            "risco da carteira está alinhado ao objetivo da estratégia."
+        ),
+    },
+    "correlacao": {
+        "Explicação": (
+            "A matriz de correlação quantifica o grau de co-movimento entre os retornos dos ativos. "
+            "Células em amarelo indicam *alta correlação (≥ 0,7)*, sugerindo diversificação limitada "
+            "entre os pares. Células em azul refletem *correlação moderada (0,4–0,7)*, e células em "
+            "vermelho (≤ −0,3) sinalizam *ativos com tendência de movimentação oposta*, que contribuem "
+            "mais efetivamente para a redução do risco por diversificação. A diagonal em azul escuro "
+            "representa a autocorrelação de cada ativo consigo mesmo (sempre igual a 1). Carteiras "
+            "com baixa correlação média tendem a apresentar *menor volatilidade e drawdowns mais controlados*."
+        ),
+    },
+}
+
+
+def _preencher_analise_fronteira_opt(texto, m):
+    """Fill {placeholders} in the Optimizer frontier analysis text."""
+    def _pct(v):
+        return f"{v * 100:.1f}".replace(".", ",") + "%"
+    vals = {
+        "port_ret":        _pct(m["port_ret"]),
+        "port_risco":      _pct(m["port_risco"]),
+        "bench_ret":       _pct(m["bench_ret"]) if pd.notna(m.get("bench_ret")) else "N/D",
+        "benchmark_label": m.get("benchmark_label", "benchmark"),
+    }
+    try:
+        return texto.format(**vals)
+    except KeyError:
+        return texto
+
+
+def _preencher_analise_metricas_opt(texto, m):
+    """Fill {placeholders} in the Optimizer metrics analysis text."""
+    def _pct(v):
+        return f"{v * 100:.2f}".replace(".", ",") + "%" if pd.notna(v) else "N/D"
+    def _f2(v):
+        return f"{v:.2f}".replace(".", ",") if pd.notna(v) else "N/D"
+    vals = {
+        "ret_port":        _pct(m["ret_port"]),
+        "ret_bench":       _pct(m.get("ret_bench")),
+        "vol_port":        _pct(m["vol_port"]),
+        "vol_bench":       _pct(m.get("vol_bench")),
+        "sharpe_port":     _f2(m["sharpe_port"]),
+        "dd_port":         _pct(abs(m["dd_port"]) if pd.notna(m["dd_port"]) else np.nan),
+        "dd_bench":        _pct(abs(m["dd_bench"]) if pd.notna(m.get("dd_bench")) else np.nan),
+        "benchmark_label": m.get("benchmark_label", "benchmark"),
+    }
+    try:
+        return texto.format(**vals)
+    except KeyError:
+        return texto
 
 
 @st.cache_resource(show_spinner="Carregando índices BR (CDI, IMA-B, IHFA...)...")
@@ -458,6 +590,23 @@ def show_optimizer():
         composition_df.columns = ['Weight']
         st.dataframe(composition_df.style.format({"Weight": "{:.2%}"}))
 
+        # --- Alocação em Renda Fixa (ativo livre de risco, estilo Capital Market Line:
+        # mistura o ativo livre de risco com a carteira arriscada escolhida acima,
+        # proporcionalmente ao peso definido no slider) ---
+        st.subheader("Alocação em Renda Fixa (Ativo Livre de Risco)")
+        _RF_ASSETS = {
+            "Real":   ("CDI",     "CDI (Taxa DI)"),
+            "Dollar": ("BIL",     "SPDR Bloomberg 1-3 Month T-Bill ETF (BIL)"),
+            "Euro":   ("EXVM.DE", "iShares eb.rexx Government Germany 0-1yr (EXVM.DE)"),
+        }
+        _rf_ticker, _rf_label = _RF_ASSETS[currency_choice]
+        st.caption(f"Ativo livre de risco para {currency_choice}: **{_rf_label}**")
+        peso_rf = st.slider(
+            "Percentual da carteira alocado no ativo livre de risco:",
+            min_value=0.0, max_value=1.0, value=0.0, step=0.01,
+            key="peso_rf_opt",
+        )
+
         # --- Seleção de período ---
         st.header("Selecione o Período de Análise")
 
@@ -484,6 +633,53 @@ def show_optimizer():
 
         returns_portfolio = returns[selected_weights.index] @ selected_weights
         returns_analysis = returns_portfolio[start_analysis:end_analysis].dropna()
+
+        # Mistura com o ativo livre de risco (peso_rf, definido acima): converte a
+        # carteira arriscada e o ativo livre de risco para retorno simples, combina
+        # proporcionalmente e volta para log-retorno — mesma convenção usada no
+        # restante do código (returns_analysis permanece em log-retorno).
+        selected_weights_final = selected_weights.copy()
+        if peso_rf > 0:
+            if _rf_ticker == "CDI":
+                _rf_log_full = (
+                    np.log1p(br_idx["CDI"].dropna())
+                    if br_idx is not None and "CDI" in br_idx.columns
+                    else pd.Series(dtype=float)
+                )
+            elif _rf_ticker == "BIL":
+                _rf_log_full = returns_benchmark_all.get(
+                    "U.S. Treasury Bill ETF (Cash Equivalent)", pd.Series(dtype=float)
+                )
+            else:
+                # .squeeze() normaliza para Series: algumas versões do yfinance
+                # retornam df['Close'] como DataFrame de 1 coluna (colunas
+                # MultiIndex) mesmo para download de um único ticker.
+                _rf_price = safe_download(_rf_ticker, start="2000-01-01", end=today).squeeze()
+                _rf_log_full = (
+                    np.log(_rf_price / _rf_price.shift(1)).dropna()
+                    if not _rf_price.empty else pd.Series(dtype=float)
+                )
+
+            _rf_log_analysis = _rf_log_full[start_analysis:end_analysis]
+            _common_rf_idx = returns_analysis.index.intersection(_rf_log_analysis.index)
+            if _common_rf_idx.empty:
+                st.warning(
+                    f"Sem dados do ativo livre de risco ({_rf_ticker}) no período "
+                    "selecionado; alocação em renda fixa não aplicada."
+                )
+            else:
+                _risky_simple = np.expm1(returns_analysis.loc[_common_rf_idx])
+                _rf_simple    = np.expm1(_rf_log_analysis.loc[_common_rf_idx])
+                _combo_simple = peso_rf * _rf_simple + (1 - peso_rf) * _risky_simple
+                returns_analysis = np.log1p(_combo_simple)
+
+                selected_weights_final = selected_weights * (1 - peso_rf)
+                selected_weights_final.loc[_rf_ticker] = peso_rf
+
+                st.markdown("**Alocação Final (com Renda Fixa)**")
+                _final_df = pd.DataFrame(selected_weights_final)
+                _final_df.columns = ["Weight"]
+                st.dataframe(_final_df.style.format({"Weight": "{:.2%}"}))
 
         rf_rate = _get_rf_rate(currency_choice, start_analysis, end_analysis, returns_analysis.index)
 
@@ -622,6 +818,74 @@ def show_optimizer():
             benchmark_label=benchmark_choice if not returns_benchmark.empty else None,
         )
 
+        # --- Relatório PPTX ---
+        m_port = _calcular_metricas(returns_analysis, rf_rate, "Carteira Otimizada")
+        series_dict = {"Carteira Otimizada": returns_analysis}
+        if not returns_benchmark.empty:
+            series_dict[benchmark_choice] = returns_benchmark
+            m_bench = _calcular_metricas(returns_benchmark, rf_rate, benchmark_choice)
+            st.session_state["opt_frontier_metrics"] = {
+                "port_ret":        float(frontier_df.loc[idx_selected, "Expected Return"]),
+                "port_risco":      float(frontier_df.loc[idx_selected, "Risk"]),
+                "bench_ret":       m_bench["retorno_anual"],
+                "benchmark_label": benchmark_choice,
+            }
+            st.session_state["opt_metrics_data"] = {
+                "ret_port":        m_port["retorno_anual"],
+                "ret_bench":       m_bench["retorno_anual"],
+                "vol_port":        m_port["volatilidade"],
+                "vol_bench":       m_bench["volatilidade"],
+                "sharpe_port":     m_port["sharpe"],
+                "dd_port":         m_port["max_drawdown"],
+                "dd_bench":        m_bench["max_drawdown"],
+                "benchmark_label": benchmark_choice,
+            }
+        else:
+            st.session_state["opt_frontier_metrics"] = {}
+            st.session_state["opt_metrics_data"] = {}
+
+        # Versão limpa (em português, sem título duplicado) da fronteira para o
+        # relatório — o gráfico interativo em tela (fig_frontier) fica em inglês
+        # e com título próprio, mas o slide do relatório já tem seu próprio
+        # título ("Fronteira Eficiente"), então o gráfico não precisa de outro.
+        _pt_labels_pt = {
+            "Minimum Volatility": "Mínima Volatilidade",
+            "Maximum Return":     "Máximo Retorno",
+            "Maximum Sharpe":     "Máximo Sharpe",
+        }
+        _fig_frontier_report_opt = go.Figure()
+        _fig_frontier_report_opt.add_trace(go.Scatter(
+            x=frontier_df["Risk"], y=frontier_df["Expected Return"],
+            mode="lines", name="Fronteira Eficiente",
+            line=dict(color=_REPORT_PALETTE[0], width=2),
+        ))
+        for label, (idx, color, symbol) in highlight_points.items():
+            _label_pt = _pt_labels_pt.get(label, label)
+            _fig_frontier_report_opt.add_trace(go.Scatter(
+                x=[frontier_df.loc[idx, "Risk"]], y=[frontier_df.loc[idx, "Expected Return"]],
+                mode="markers+text", name=_label_pt,
+                text=[_label_pt], textposition="bottom center",
+                marker=dict(size=12, symbol=symbol, color=color),
+            ))
+        _fig_frontier_report_opt.update_layout(**_yc_layout(
+            xaxis_title=f"Risco ({risk_measure})",
+            yaxis_title="Retorno Esperado",
+        ))
+
+        st.session_state["opt_report_series"]  = series_dict
+        st.session_state["opt_report_returns"] = returns
+        st.session_state["opt_weights_atual"]  = selected_weights_final.to_dict()
+        st.session_state["opt_weights_sug"]    = None
+        st.session_state["opt_benchmark"]      = benchmark_choice if not returns_benchmark.empty else None
+        st.session_state["opt_frontier_fig"]   = _fig_frontier_report_opt
+
+        _render_report_ui(
+            "opt",
+            textos_padrao=_TEXTOS_PADRAO_OPT,
+            fill_fronteira=_preencher_analise_fronteira_opt,
+            fill_metricas=_preencher_analise_metricas_opt,
+            show_fronteira=True,
+        )
 
     except Exception as e:
 

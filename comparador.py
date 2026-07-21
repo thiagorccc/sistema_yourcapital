@@ -639,7 +639,7 @@ def _tabela_rentabilidade_mensal(portfolios_dict, benchmark_series=None, benchma
 
 def _get_rf_rate(currency, start, end, index):
     """Retorna taxa diária livre de risco média no período.
-    Real → CDI  |  Dollar → BIL  |  Euro → EXX6.DE (Govs curtos zona do euro)"""
+    Real → CDI  |  Dollar → BIL  |  Euro → EXVM.DE (iShares eb.rexx Government Germany 0-1yr)"""
     today_str = str(pd.Timestamp.today().date())
     if currency == "Real":
         br = _get_br_slice(start=str(start), end=str(end))
@@ -656,7 +656,7 @@ def _get_rf_rate(currency, start, end, index):
             pass
         return 0.0
     elif currency == "Euro":
-        rf_data = safe_download("EXX6.DE", start="2000-01-01", end=today_str)
+        rf_data = safe_download("EXVM.DE", start="2000-01-01", end=today_str)
         if not rf_data.empty:
             rf_ret = rf_data.pct_change().dropna()
             sl = rf_ret[str(start):str(end)].reindex(index).dropna()
@@ -1541,8 +1541,13 @@ def _gerar_relatorio_pptx(client_name, portfolio_value, series_dict, returns_df,
     return buf.getvalue()
 
 
-def _render_report_ui(tab_key):
-    """Renders the PPTX report generation UI for either tab."""
+def _render_report_ui(tab_key, textos_padrao=None, fill_fronteira=None, fill_metricas=None, show_fronteira=None):
+    """Renders the PPTX report generation UI for either tab.
+
+    `textos_padrao`/`fill_fronteira`/`fill_metricas` let callers outside the
+    "carteira atual vs sugerida" context (ex.: Optimizer.py, que compara a
+    carteira otimizada com um benchmark) plugar seus próprios textos padrão e
+    funções de preenchimento de placeholders, mantendo o mesmo fluxo de UI."""
     series_key   = f"{tab_key}_report_series"
     returns_key  = f"{tab_key}_report_returns"
     wa_key       = f"{tab_key}_weights_atual"
@@ -1557,7 +1562,7 @@ def _render_report_ui(tab_key):
     _MODELOS_RELATORIO = {"Relatório 1": "analise.pptx", "Relatório 2": "analise1.pptx"}
 
     st.markdown("---")
-    with st.expander("Gerar Relatório PPTX", expanded=False):
+    with st.expander("Gerar Relatório", expanded=False):
         r_modelo = st.radio(
             "Modelo do relatório:",
             list(_MODELOS_RELATORIO.keys()),
@@ -1574,10 +1579,14 @@ def _render_report_ui(tab_key):
         st.markdown("**Textos por slide** *(opcional — aparecem abaixo de cada gráfico/tabela)*")
 
         slide_texts = {}
+        _TP = textos_padrao if textos_padrao is not None else _TEXTOS_PADRAO
+        _fill_fronteira = fill_fronteira or _preencher_analise_fronteira
+        _fill_metricas  = fill_metricas  or _preencher_analise_metricas
+        _show_fronteira = (tab_key == "t1") if show_fronteira is None else show_fronteira
 
         # --- Sections with morningcall-style multi-paragraph UI ---
         _SECS_MULTI = [
-            ("fronteira",    "Fronteira Eficiente",          tab_key == "t1"),
+            ("fronteira",    "Fronteira Eficiente",          _show_fronteira),
             ("metricas",     "Métricas de Desempenho",       True),
             ("volatilidade", "Volatilidade Móvel (30 Dias)", True),
             ("drawdown",     "Drawdown da Carteira",         True),
@@ -1590,7 +1599,7 @@ def _render_report_ui(tab_key):
                 "Parágrafos", min_value=1, max_value=5, value=2, step=1,
                 key=f"{tab_key}_np_{_sk}",
             ))
-            _opts = ["Sem texto"] + list(_TEXTOS_PADRAO[_sk].keys())
+            _opts = ["Sem texto"] + list(_TP[_sk].keys())
             _paras = []
             for _pi in range(_n):
                 _sel = st.selectbox(
@@ -1599,15 +1608,15 @@ def _render_report_ui(tab_key):
                     key=f"{tab_key}_sel_{_sk}_{_pi}",
                 )
                 if _sel != "Sem texto":
-                    _tb = _TEXTOS_PADRAO[_sk][_sel]
-                    if "{atual_ret}" in _tb:
+                    _tb = _TP[_sk][_sel]
+                    if _sk == "fronteira":
                         _m = st.session_state.get(f"{tab_key}_frontier_metrics", {})
                         if _m:
-                            _tb = _preencher_analise_fronteira(_tb, _m)
-                    elif "{ret_atual}" in _tb:
+                            _tb = _fill_fronteira(_tb, _m)
+                    elif _sk == "metricas":
                         _m = st.session_state.get(f"{tab_key}_metrics_data", {})
                         if _m:
-                            _tb = _preencher_analise_metricas(_tb, _m)
+                            _tb = _fill_metricas(_tb, _m)
                     _txt = st.text_area(
                         f"Texto — parágrafo {_pi + 1}",
                         value=_tb,
@@ -1629,7 +1638,7 @@ def _render_report_ui(tab_key):
 
         # --- Correlação: single text area ---
         st.markdown("**Matriz de Correlação**")
-        _opts_corr = ["Sem texto"] + list(_TEXTOS_PADRAO["correlacao"].keys())
+        _opts_corr = ["Sem texto"] + list(_TP["correlacao"].keys())
         _sel_corr = st.selectbox(
             "Matriz de Correlação",
             _opts_corr,
@@ -1639,7 +1648,7 @@ def _render_report_ui(tab_key):
         if _sel_corr != "Sem texto":
             slide_texts["correlacao"] = st.text_area(
                 "Texto editável",
-                value=_TEXTOS_PADRAO["correlacao"][_sel_corr],
+                value=_TP["correlacao"][_sel_corr],
                 key=f"{tab_key}_txt_correlacao_{_sel_corr}",
                 height=110,
                 label_visibility="collapsed",
