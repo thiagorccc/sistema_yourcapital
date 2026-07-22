@@ -566,6 +566,32 @@ def show_optimizer():
         max_ret_idx = frontier_df['Expected Return'].idxmax()
         max_sharpe_idx = frontier_df['Sharpe'].idxmax()
 
+        # --- Escolha da carteira para análise --- (feito antes do gráfico da
+        # fronteira para que o ponto escolhido já apareça marcado nele)
+        st.header("Selecione o Portfólio para Análise")
+
+        _tags = {
+            min_vol_idx:    "[Mín. Volatilidade]  ",
+            max_ret_idx:    "[Máx. Retorno]  ",
+            max_sharpe_idx: "[Máx. Sharpe]  ",
+        }
+        frontier_labels = [
+            f"{_tags.get(i, '')}Retorno: {row['Expected Return']:.1%}  |  Risco: {row['Risk']:.1%}"
+            for i, row in frontier_df.iterrows()
+        ]
+
+        selected_label = st.selectbox(
+            "Escolha qual portfólio analisar:",
+            options=frontier_labels,
+            index=int(max_sharpe_idx),
+            key="portfolio_choice_opt",
+        )
+        idx_selected = frontier_labels.index(selected_label)
+        selected_sigma = frontier_df.loc[idx_selected, "Risk"]
+
+        selected_weights = weights_frontier.loc[round(selected_sigma, 6)]
+        selected_weights = selected_weights[selected_weights > 0]
+
         # --- Plot Fronteira ---
         st.subheader("Fronteira Eficiente")
 
@@ -600,6 +626,19 @@ def show_optimizer():
                 textposition='bottom center',
                 marker=dict(size=12, symbol=symbol, color=color)
             ))
+
+        # Carteira escolhida em "Selecione o Portfólio para Análise" — marcada
+        # separadamente mesmo quando coincide com um dos pontos acima, para
+        # deixar claro qual é a carteira efetivamente usada na análise abaixo.
+        fig_frontier.add_trace(go.Scatter(
+            x=[frontier_df.loc[idx_selected, "Risk"]],
+            y=[frontier_df.loc[idx_selected, "Expected Return"]],
+            mode="markers+text",
+            name="Selecionado",
+            text=["Selecionado"],
+            textposition="top center",
+            marker=dict(size=16, symbol="circle-open", color="orange", line=dict(width=3)),
+        ))
 
         # --- CML (Capital Market Line): reta que liga o ativo livre de risco
         # à carteira de máximo Sharpe — que já é a tangência de verdade, pois
@@ -637,31 +676,6 @@ def show_optimizer():
         )
 
         st.plotly_chart(fig_frontier, use_container_width=True)
-
-        # --- Escolha da carteira para análise ---
-        st.header("Selecione o Portfólio para Análise")
-
-        _tags = {
-            min_vol_idx:    "[Mín. Volatilidade]  ",
-            max_ret_idx:    "[Máx. Retorno]  ",
-            max_sharpe_idx: "[Máx. Sharpe]  ",
-        }
-        frontier_labels = [
-            f"{_tags.get(i, '')}Retorno: {row['Expected Return']:.1%}  |  Risco: {row['Risk']:.1%}"
-            for i, row in frontier_df.iterrows()
-        ]
-
-        selected_label = st.selectbox(
-            "Escolha qual portfólio analisar:",
-            options=frontier_labels,
-            index=int(max_sharpe_idx),
-            key="portfolio_choice_opt",
-        )
-        idx_selected = frontier_labels.index(selected_label)
-        selected_sigma = frontier_df.loc[idx_selected, "Risk"]
-
-        selected_weights = weights_frontier.loc[round(selected_sigma, 6)]
-        selected_weights = selected_weights[selected_weights > 0]
 
         # --- Alocação em Renda Fixa (ativo livre de risco, estilo Capital Market Line:
         # mistura o ativo livre de risco com a carteira arriscada escolhida acima,
@@ -931,6 +945,12 @@ def show_optimizer():
                 text=[_label_pt], textposition="bottom center",
                 marker=dict(size=12, symbol=symbol, color=color),
             ))
+        _fig_frontier_report_opt.add_trace(go.Scatter(
+            x=[frontier_df.loc[idx_selected, "Risk"]], y=[frontier_df.loc[idx_selected, "Expected Return"]],
+            mode="markers+text", name="Selecionado",
+            text=["Selecionado"], textposition="top center",
+            marker=dict(size=16, symbol="circle-open", color="orange", line=dict(width=3)),
+        ))
         if add_cml and not _rf_log_full.empty:
             _sigma_tan = float(frontier_df.loc[max_sharpe_idx, "Risk"])
             _mu_tan    = float(frontier_df.loc[max_sharpe_idx, "Expected Return"])
