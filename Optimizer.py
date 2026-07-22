@@ -522,8 +522,47 @@ def show_optimizer():
         max_ret_idx = frontier_df['Expected Return'].idxmax()
         max_sharpe_idx = frontier_df['Sharpe'].idxmax()
 
+        # Ativo livre de risco da moeda escolhida — usado tanto na CML (abaixo)
+        # quanto na mistura de Alocação em Renda Fixa (mais adiante).
+        _RF_ASSETS = {
+            "Real":   ("CDI",     "CDI (Taxa DI)"),
+            "Dollar": ("BIL",     "SPDR Bloomberg 1-3 Month T-Bill ETF (BIL)"),
+            "Euro":   ("EXVM.DE", "iShares eb.rexx Government Germany 0-1yr (EXVM.DE)"),
+        }
+        _rf_ticker, _rf_label = _RF_ASSETS[currency_choice]
+
+        def _get_rf_log_series():
+            """Série de log-retornos diários do ativo livre de risco da moeda
+            escolhida, com fallback direto na API do BCB para o CDI (mesma
+            estratégia usada em _get_rf_rate)."""
+            if _rf_ticker == "CDI":
+                if br_idx is not None and "CDI" in br_idx.columns:
+                    return np.log1p(br_idx["CDI"].dropna())
+                try:
+                    _cdi_fb = _load_cdi_bcb("2000-01-01", str(today.date()))
+                    return np.log1p(_cdi_fb) if not _cdi_fb.empty else pd.Series(dtype=float)
+                except Exception:
+                    return pd.Series(dtype=float)
+            elif _rf_ticker == "BIL":
+                return returns_benchmark_all.get(
+                    "U.S. Treasury Bill ETF (Cash Equivalent)", pd.Series(dtype=float)
+                )
+            else:
+                # .squeeze() normaliza para Series: algumas versões do yfinance
+                # retornam df['Close'] como DataFrame de 1 coluna (colunas
+                # MultiIndex) mesmo para download de um único ticker.
+                _price = safe_download(_rf_ticker, start="2000-01-01", end=today).squeeze()
+                return np.log(_price / _price.shift(1)).dropna() if not _price.empty else pd.Series(dtype=float)
+
         # --- Plot Fronteira ---
         st.subheader("Fronteira Eficiente")
+
+        add_cml = st.checkbox(
+            "Adicionar Linha de Mercado de Capitais (CML)",
+            value=False,
+            key="add_cml_opt",
+            help="Reta que liga o ativo livre de risco à carteira de máximo Sharpe (tangência).",
+        )
 
         fig_frontier = go.Figure()
         fig_frontier.add_trace(go.Scatter(
@@ -549,6 +588,36 @@ def show_optimizer():
                 textposition='bottom center',
                 marker=dict(size=12, symbol=symbol, color=color)
             ))
+
+        # --- CML (Capital Market Line): reta que liga o ativo livre de risco
+        # (moeda escolhida) à carteira tangente (máximo Sharpe) ---
+        rf_annual_cml = None
+        if add_cml:
+            _rf_log_full_cml = _get_rf_log_series()
+            if _rf_log_full_cml.empty:
+                st.warning(
+                    f"Não foi possível obter dados do ativo livre de risco ({_rf_ticker}) "
+                    "para desenhar a CML."
+                )
+            else:
+                rf_annual_cml = float(np.expm1(_rf_log_full_cml.mean() * 252))
+                sigma_tan = float(frontier_df.loc[max_sharpe_idx, "Risk"])
+                mu_tan    = float(frontier_df.loc[max_sharpe_idx, "Expected Return"])
+                if sigma_tan > 0:
+                    slope_cml = (mu_tan - rf_annual_cml) / sigma_tan
+                    x_line = np.linspace(0.0, float(frontier_df["Risk"].max()) * 1.1, 50)
+                    y_line = rf_annual_cml + slope_cml * x_line
+                    fig_frontier.add_trace(go.Scatter(
+                        x=x_line, y=y_line, mode="lines",
+                        name=f"CML (rf={_rf_label}: {rf_annual_cml:.2%})",
+                        line=dict(dash="dash", color="black"),
+                    ))
+                    fig_frontier.add_trace(go.Scatter(
+                        x=[0.0], y=[rf_annual_cml], mode="markers+text",
+                        name="Ativo Livre de Risco",
+                        text=[_rf_ticker], textposition="top center",
+                        marker=dict(size=10, symbol="circle", color="black"),
+                    ))
 
         fig_frontier.update_layout(
             title=f"Efficient Frontier with Key Portfolios Highlighted ({risk_measure})",
@@ -583,29 +652,30 @@ def show_optimizer():
 
         selected_weights = weights_frontier.loc[round(selected_sigma, 6)]
         selected_weights = selected_weights[selected_weights > 0]
-  
-        st.subheader("Composição do Portfólio")
-
-        composition_df = pd.DataFrame(selected_weights)
-        composition_df.columns = ['Weight']
-        st.dataframe(composition_df.style.format({"Weight": "{:.2%}"}))
 
         # --- Alocação em Renda Fixa (ativo livre de risco, estilo Capital Market Line:
         # mistura o ativo livre de risco com a carteira arriscada escolhida acima,
-        # proporcionalmente ao peso definido no slider) ---
+        # proporcionalmente ao peso definido no slider). Escolhido antes da tabela de
+        # composição para que ela já mostre a carteira final (risco + RF) de uma vez só. ---
         st.subheader("Alocação em Renda Fixa (Ativo Livre de Risco)")
-        _RF_ASSETS = {
-            "Real":   ("CDI",     "CDI (Taxa DI)"),
-            "Dollar": ("BIL",     "SPDR Bloomberg 1-3 Month T-Bill ETF (BIL)"),
-            "Euro":   ("EXVM.DE", "iShares eb.rexx Government Germany 0-1yr (EXVM.DE)"),
-        }
-        _rf_ticker, _rf_label = _RF_ASSETS[currency_choice]
         st.caption(f"Ativo livre de risco para {currency_choice}: **{_rf_label}**")
         peso_rf = st.slider(
             "Percentual da carteira alocado no ativo livre de risco:",
             min_value=0.0, max_value=1.0, value=0.0, step=0.01,
             key="peso_rf_opt",
         )
+
+        if peso_rf > 0:
+            selected_weights_final = selected_weights * (1 - peso_rf)
+            selected_weights_final.loc[_rf_ticker] = peso_rf
+        else:
+            selected_weights_final = selected_weights.copy()
+
+        st.subheader("Composição do Portfólio")
+
+        composition_df = pd.DataFrame(selected_weights_final)
+        composition_df.columns = ['Weight']
+        st.dataframe(composition_df.style.format({"Weight": "{:.2%}"}))
 
         # --- Seleção de período ---
         st.header("Selecione o Período de Análise")
@@ -637,34 +707,11 @@ def show_optimizer():
         # Mistura com o ativo livre de risco (peso_rf, definido acima): converte a
         # carteira arriscada e o ativo livre de risco para retorno simples, combina
         # proporcionalmente e volta para log-retorno — mesma convenção usada no
-        # restante do código (returns_analysis permanece em log-retorno).
-        selected_weights_final = selected_weights.copy()
+        # restante do código (returns_analysis permanece em log-retorno). Os pesos
+        # (selected_weights_final) já foram combinados acima, para a tabela de
+        # Composição do Portfólio.
         if peso_rf > 0:
-            if _rf_ticker == "CDI":
-                if br_idx is not None and "CDI" in br_idx.columns:
-                    _rf_log_full = np.log1p(br_idx["CDI"].dropna())
-                else:
-                    # Fallback direto na API do BCB — mesma estratégia usada em
-                    # _get_rf_rate quando o CDI não veio na carga em cache dos
-                    # índices BR (ex.: instabilidade pontual da API do BCB).
-                    try:
-                        _cdi_fb = _load_cdi_bcb("2000-01-01", str(today.date()))
-                        _rf_log_full = np.log1p(_cdi_fb) if not _cdi_fb.empty else pd.Series(dtype=float)
-                    except Exception:
-                        _rf_log_full = pd.Series(dtype=float)
-            elif _rf_ticker == "BIL":
-                _rf_log_full = returns_benchmark_all.get(
-                    "U.S. Treasury Bill ETF (Cash Equivalent)", pd.Series(dtype=float)
-                )
-            else:
-                # .squeeze() normaliza para Series: algumas versões do yfinance
-                # retornam df['Close'] como DataFrame de 1 coluna (colunas
-                # MultiIndex) mesmo para download de um único ticker.
-                _rf_price = safe_download(_rf_ticker, start="2000-01-01", end=today).squeeze()
-                _rf_log_full = (
-                    np.log(_rf_price / _rf_price.shift(1)).dropna()
-                    if not _rf_price.empty else pd.Series(dtype=float)
-                )
+            _rf_log_full = _get_rf_log_series()
 
             if _rf_log_full.empty:
                 st.warning(
@@ -687,14 +734,6 @@ def show_optimizer():
                 _rf_simple    = np.expm1(_rf_log_analysis.loc[_common_rf_idx])
                 _combo_simple = peso_rf * _rf_simple + (1 - peso_rf) * _risky_simple
                 returns_analysis = np.log1p(_combo_simple)
-
-                selected_weights_final = selected_weights * (1 - peso_rf)
-                selected_weights_final.loc[_rf_ticker] = peso_rf
-
-                st.markdown("**Alocação Final (com Renda Fixa)**")
-                _final_df = pd.DataFrame(selected_weights_final)
-                _final_df.columns = ["Weight"]
-                st.dataframe(_final_df.style.format({"Weight": "{:.2%}"}))
 
         rf_rate = _get_rf_rate(currency_choice, start_analysis, end_analysis, returns_analysis.index)
 
@@ -881,6 +920,21 @@ def show_optimizer():
                 mode="markers+text", name=_label_pt,
                 text=[_label_pt], textposition="bottom center",
                 marker=dict(size=12, symbol=symbol, color=color),
+            ))
+        if add_cml and rf_annual_cml is not None:
+            _sigma_tan = float(frontier_df.loc[max_sharpe_idx, "Risk"])
+            _x_line = np.linspace(0.0, float(frontier_df["Risk"].max()) * 1.1, 50)
+            _slope_cml = (float(frontier_df.loc[max_sharpe_idx, "Expected Return"]) - rf_annual_cml) / _sigma_tan
+            _fig_frontier_report_opt.add_trace(go.Scatter(
+                x=_x_line, y=rf_annual_cml + _slope_cml * _x_line, mode="lines",
+                name=f"CML (rf={_rf_label}: {rf_annual_cml:.2%})",
+                line=dict(dash="dash", color="black"),
+            ))
+            _fig_frontier_report_opt.add_trace(go.Scatter(
+                x=[0.0], y=[rf_annual_cml], mode="markers+text",
+                name="Ativo Livre de Risco",
+                text=[_rf_ticker], textposition="top center",
+                marker=dict(size=10, symbol="circle", color="black"),
             ))
         _fig_frontier_report_opt.update_layout(**_yc_layout(
             xaxis_title=f"Risco ({risk_measure})",
