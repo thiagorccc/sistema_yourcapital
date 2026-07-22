@@ -590,8 +590,13 @@ def show_optimizer():
             ))
 
         # --- CML (Capital Market Line): reta que liga o ativo livre de risco
-        # (moeda escolhida) à carteira tangente (máximo Sharpe) ---
+        # (moeda escolhida) à carteira tangente. A carteira "Máximo Sharpe" já
+        # destacada na fronteira maximiza Retorno/Risco (equivalente a assumir
+        # rf = 0) e por isso não coincide, em geral, com o ponto de tangência
+        # real da CML — que precisa maximizar (Retorno − rf) / Risco usando o
+        # rf de verdade. Por isso a tangência é recalculada aqui.
         rf_annual_cml = None
+        sigma_tan = mu_tan = None
         if add_cml:
             _rf_log_full_cml = _get_rf_log_series()
             if _rf_log_full_cml.empty:
@@ -601,8 +606,11 @@ def show_optimizer():
                 )
             else:
                 rf_annual_cml = float(np.expm1(_rf_log_full_cml.mean() * 252))
-                sigma_tan = float(frontier_df.loc[max_sharpe_idx, "Risk"])
-                mu_tan    = float(frontier_df.loc[max_sharpe_idx, "Expected Return"])
+                _sharpe_cml = (frontier_df["Expected Return"] - rf_annual_cml) / frontier_df["Risk"]
+                _sharpe_cml = _sharpe_cml.replace([np.inf, -np.inf], np.nan)
+                idx_tangency_cml = _sharpe_cml.idxmax()
+                sigma_tan = float(frontier_df.loc[idx_tangency_cml, "Risk"])
+                mu_tan    = float(frontier_df.loc[idx_tangency_cml, "Expected Return"])
                 if sigma_tan > 0:
                     slope_cml = (mu_tan - rf_annual_cml) / sigma_tan
                     x_line = np.linspace(0.0, float(frontier_df["Risk"].max()) * 1.1, 50)
@@ -618,6 +626,14 @@ def show_optimizer():
                         text=[_rf_ticker], textposition="top center",
                         marker=dict(size=10, symbol="circle", color="black"),
                     ))
+                    fig_frontier.add_trace(go.Scatter(
+                        x=[sigma_tan], y=[mu_tan], mode="markers+text",
+                        name="Carteira Tangente (CML)",
+                        text=["Tangência"], textposition="top center",
+                        marker=dict(size=12, symbol="x", color="black"),
+                    ))
+                else:
+                    sigma_tan = mu_tan = None
 
         fig_frontier.update_layout(
             title=f"Efficient Frontier with Key Portfolios Highlighted ({risk_measure})",
@@ -921,10 +937,9 @@ def show_optimizer():
                 text=[_label_pt], textposition="bottom center",
                 marker=dict(size=12, symbol=symbol, color=color),
             ))
-        if add_cml and rf_annual_cml is not None:
-            _sigma_tan = float(frontier_df.loc[max_sharpe_idx, "Risk"])
+        if add_cml and rf_annual_cml is not None and sigma_tan is not None:
             _x_line = np.linspace(0.0, float(frontier_df["Risk"].max()) * 1.1, 50)
-            _slope_cml = (float(frontier_df.loc[max_sharpe_idx, "Expected Return"]) - rf_annual_cml) / _sigma_tan
+            _slope_cml = (mu_tan - rf_annual_cml) / sigma_tan
             _fig_frontier_report_opt.add_trace(go.Scatter(
                 x=_x_line, y=rf_annual_cml + _slope_cml * _x_line, mode="lines",
                 name=f"CML (rf={_rf_label}: {rf_annual_cml:.2%})",
@@ -935,6 +950,12 @@ def show_optimizer():
                 name="Ativo Livre de Risco",
                 text=[_rf_ticker], textposition="top center",
                 marker=dict(size=10, symbol="circle", color="black"),
+            ))
+            _fig_frontier_report_opt.add_trace(go.Scatter(
+                x=[sigma_tan], y=[mu_tan], mode="markers+text",
+                name="Carteira Tangente (CML)",
+                text=["Tangência"], textposition="top center",
+                marker=dict(size=12, symbol="x", color="black"),
             ))
         _fig_frontier_report_opt.update_layout(**_yc_layout(
             xaxis_title=f"Risco ({risk_measure})",
