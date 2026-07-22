@@ -13,7 +13,7 @@ import time
 import plotly.figure_factory as ff
 
 from Assets import symbol_real, symbol_dolar, symbol_euro, symbol_br_indices, load_br_indices, BR_BENCH_TICKERS
-from comparador import _tabela_rentabilidade_mensal, _calcular_metricas, _exibir_metricas, _compute_synthetic_returns, _get_rf_rate, _render_synth_expander, _render_constraints_expander, _build_opt_constraints, _render_report_ui, _yc_layout, _REPORT_PALETTE
+from comparador import _tabela_rentabilidade_mensal, _calcular_metricas, _exibir_metricas, _compute_synthetic_returns, _get_rf_rate, _render_synth_expander, _render_constraints_expander, _build_opt_constraints, _render_report_ui, _yc_layout, _REPORT_PALETTE, _load_cdi_bcb
 
 
 # ---------------------------------------------------------------------------
@@ -641,11 +641,17 @@ def show_optimizer():
         selected_weights_final = selected_weights.copy()
         if peso_rf > 0:
             if _rf_ticker == "CDI":
-                _rf_log_full = (
-                    np.log1p(br_idx["CDI"].dropna())
-                    if br_idx is not None and "CDI" in br_idx.columns
-                    else pd.Series(dtype=float)
-                )
+                if br_idx is not None and "CDI" in br_idx.columns:
+                    _rf_log_full = np.log1p(br_idx["CDI"].dropna())
+                else:
+                    # Fallback direto na API do BCB — mesma estratégia usada em
+                    # _get_rf_rate quando o CDI não veio na carga em cache dos
+                    # índices BR (ex.: instabilidade pontual da API do BCB).
+                    try:
+                        _cdi_fb = _load_cdi_bcb("2000-01-01", str(today.date()))
+                        _rf_log_full = np.log1p(_cdi_fb) if not _cdi_fb.empty else pd.Series(dtype=float)
+                    except Exception:
+                        _rf_log_full = pd.Series(dtype=float)
             elif _rf_ticker == "BIL":
                 _rf_log_full = returns_benchmark_all.get(
                     "U.S. Treasury Bill ETF (Cash Equivalent)", pd.Series(dtype=float)
@@ -660,14 +666,23 @@ def show_optimizer():
                     if not _rf_price.empty else pd.Series(dtype=float)
                 )
 
-            _rf_log_analysis = _rf_log_full[start_analysis:end_analysis]
-            _common_rf_idx = returns_analysis.index.intersection(_rf_log_analysis.index)
-            if _common_rf_idx.empty:
+            if _rf_log_full.empty:
                 st.warning(
-                    f"Sem dados do ativo livre de risco ({_rf_ticker}) no período "
-                    "selecionado; alocação em renda fixa não aplicada."
+                    f"Não foi possível obter dados do ativo livre de risco ({_rf_ticker}); "
+                    "alocação em renda fixa não aplicada."
                 )
+                _common_rf_idx = pd.DatetimeIndex([])
             else:
+                _rf_log_full.index = pd.to_datetime(_rf_log_full.index)
+                _rf_log_analysis = _rf_log_full[start_analysis:end_analysis]
+                _common_rf_idx = returns_analysis.index.intersection(_rf_log_analysis.index)
+                if _common_rf_idx.empty:
+                    st.warning(
+                        f"Sem dados do ativo livre de risco ({_rf_ticker}) no período "
+                        "selecionado; alocação em renda fixa não aplicada."
+                    )
+
+            if not _common_rf_idx.empty:
                 _risky_simple = np.expm1(returns_analysis.loc[_common_rf_idx])
                 _rf_simple    = np.expm1(_rf_log_analysis.loc[_common_rf_idx])
                 _combo_simple = peso_rf * _rf_simple + (1 - peso_rf) * _risky_simple
@@ -890,8 +905,6 @@ def show_optimizer():
     except Exception as e:
 
          st.error("An unexpected error occurred during the optimization process.")
-         import traceback
-         st.text(traceback.format_exc())
         #st.text(f"Technical details: {e}")
         
    
