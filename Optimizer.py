@@ -890,6 +890,8 @@ def show_optimizer():
     except Exception as e:
 
          st.error("An unexpected error occurred during the optimization process.")
+         import traceback
+         st.text(traceback.format_exc())
         #st.text(f"Technical details: {e}")
         
    
