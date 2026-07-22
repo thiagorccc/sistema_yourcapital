@@ -592,6 +592,31 @@ def show_optimizer():
         selected_weights = weights_frontier.loc[round(selected_sigma, 6)]
         selected_weights = selected_weights[selected_weights > 0]
 
+        # --- Alocação em Renda Fixa (ativo livre de risco, estilo Capital Market Line:
+        # mistura o ativo livre de risco com a carteira arriscada escolhida acima,
+        # proporcionalmente ao peso definido no slider). Feito antes do gráfico da
+        # fronteira para que o ponto "Selecionado" já apareça deslocado sobre a
+        # reta de mistura (CML, quando a carteira escolhida é a de máximo Sharpe). ---
+        st.subheader("Alocação em Renda Fixa (Ativo Livre de Risco)")
+        st.caption(f"Ativo livre de risco para {currency_choice}: **{_rf_label}**")
+        peso_rf = st.slider(
+            "Percentual da carteira alocado no ativo livre de risco:",
+            min_value=0.0, max_value=1.0, value=0.0, step=0.01,
+            key="peso_rf_opt",
+        )
+
+        if peso_rf > 0:
+            selected_weights_final = selected_weights * (1 - peso_rf)
+            selected_weights_final.loc[_rf_ticker] = peso_rf
+        else:
+            selected_weights_final = selected_weights.copy()
+
+        st.subheader("Composição do Portfólio")
+
+        composition_df = pd.DataFrame(selected_weights_final)
+        composition_df.columns = ['Weight']
+        st.dataframe(composition_df.style.format({"Weight": "{:.2%}"}))
+
         # --- Plot Fronteira ---
         st.subheader("Fronteira Eficiente")
 
@@ -630,9 +655,18 @@ def show_optimizer():
         # Carteira escolhida em "Selecione o Portfólio para Análise" — marcada
         # separadamente mesmo quando coincide com um dos pontos acima, para
         # deixar claro qual é a carteira efetivamente usada na análise abaixo.
+        # Quando há alocação em renda fixa, o ponto desliza sobre a reta que
+        # liga o ativo livre de risco à carteira escolhida (a própria CML,
+        # caso a escolhida seja a de máximo Sharpe/tangência).
+        if peso_rf > 0 and not _rf_log_full.empty:
+            _sigma_sel_disp = (1 - peso_rf) * float(frontier_df.loc[idx_selected, "Risk"])
+            _mu_sel_disp = peso_rf * rf_annual + (1 - peso_rf) * float(frontier_df.loc[idx_selected, "Expected Return"])
+        else:
+            _sigma_sel_disp = float(frontier_df.loc[idx_selected, "Risk"])
+            _mu_sel_disp = float(frontier_df.loc[idx_selected, "Expected Return"])
         fig_frontier.add_trace(go.Scatter(
-            x=[frontier_df.loc[idx_selected, "Risk"]],
-            y=[frontier_df.loc[idx_selected, "Expected Return"]],
+            x=[_sigma_sel_disp],
+            y=[_mu_sel_disp],
             mode="markers+text",
             name="Selecionado",
             text=["Selecionado"],
@@ -676,30 +710,6 @@ def show_optimizer():
         )
 
         st.plotly_chart(fig_frontier, use_container_width=True)
-
-        # --- Alocação em Renda Fixa (ativo livre de risco, estilo Capital Market Line:
-        # mistura o ativo livre de risco com a carteira arriscada escolhida acima,
-        # proporcionalmente ao peso definido no slider). Escolhido antes da tabela de
-        # composição para que ela já mostre a carteira final (risco + RF) de uma vez só. ---
-        st.subheader("Alocação em Renda Fixa (Ativo Livre de Risco)")
-        st.caption(f"Ativo livre de risco para {currency_choice}: **{_rf_label}**")
-        peso_rf = st.slider(
-            "Percentual da carteira alocado no ativo livre de risco:",
-            min_value=0.0, max_value=1.0, value=0.0, step=0.01,
-            key="peso_rf_opt",
-        )
-
-        if peso_rf > 0:
-            selected_weights_final = selected_weights * (1 - peso_rf)
-            selected_weights_final.loc[_rf_ticker] = peso_rf
-        else:
-            selected_weights_final = selected_weights.copy()
-
-        st.subheader("Composição do Portfólio")
-
-        composition_df = pd.DataFrame(selected_weights_final)
-        composition_df.columns = ['Weight']
-        st.dataframe(composition_df.style.format({"Weight": "{:.2%}"}))
 
         # --- Seleção de período ---
         st.header("Selecione o Período de Análise")
@@ -946,7 +956,7 @@ def show_optimizer():
                 marker=dict(size=12, symbol=symbol, color=color),
             ))
         _fig_frontier_report_opt.add_trace(go.Scatter(
-            x=[frontier_df.loc[idx_selected, "Risk"]], y=[frontier_df.loc[idx_selected, "Expected Return"]],
+            x=[_sigma_sel_disp], y=[_mu_sel_disp],
             mode="markers+text", name="Selecionado",
             text=["Selecionado"], textposition="top center",
             marker=dict(size=16, symbol="circle-open", color="orange", line=dict(width=3)),
